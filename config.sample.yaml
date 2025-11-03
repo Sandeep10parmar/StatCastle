@@ -1,0 +1,34 @@
+# Copy this file to config.yaml and fill in your details.
+# Minimum you need: club_id + either league_id OR match_ids.
+# Option A (recommended): set league_id to auto-discover matches from the league pages.
+# Option B: provide match_ids explicitly.
+
+# Base path for your CricClubs league (no trailing slash).
+# Example: https://cricclubs.com/HoustonPremierT20League
+base_path: "https://cricclubs.com/YOUR_LEAGUE_PATH"
+
+# Numeric Club ID (find it in URLs as &clubId=XXXX)
+club_id: 1366
+
+# Optional: Numeric League ID (find it in URL as league=NN).
+# If provided, exporter will try to discover matches from league "Schedule" & "Results".
+league_id: 25
+
+# Your team name as shown on match titles/scorecards (used for team-level metrics)
+team_name: "Royals"
+
+# Optional: If you don't want auto-discovery, list match IDs explicitly.
+# Example: [1861, 1843, 1841, 1796, 1783, 1777]
+match_ids: []
+
+
+# --- Advanced: multiple tournaments ---
+# Instead of a single league_id, you can list multiple entries. The exporter can loop each
+# and save outputs in subfolders. (If you only use analyze.py, simply drop all CSVs in any
+# subfolders of cricclubs_export_out/ and they'll be merged automatically.)
+# leagues:
+#   - { base_path: "https://cricclubs.com/YourLeagueA", club_id: 1111, league_id: 2222 }
+#   - { base_path: "https://cricclubs.com/YourLeagueB", club_id: 3333, league_id: 4444 }
+#
+# Optional: player photos mapping (CSV file path, columns: name,photo_url)
+# players_csv: "players.csv"
