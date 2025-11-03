@@ -2,41 +2,43 @@
 # Team Analytics - CricClubs Configuration
 # =============================================
 
-# Name of your team (must match scorecards on CricClubs)
+# Name of your team (must match how it appears on CricClubs scorecards)
 team_name: "Royals"
 
 # ------------------------------------------------------------------
-# OPTION 1: Single tournament / league (simplest)
-# Uncomment this block if analyzing only one tournament
+# TEAM-BASED EXPORT MODE (Recommended)
 # ------------------------------------------------------------------
-# base_path: "https://cricclubs.com/HoustonPremierT20League"
-# club_id: 1366
-# league_id: 25
-# # Optional: manually specify matches if league_id unavailable
-# # match_ids: [1861, 1843, 1841, 1796, 1783, 1777]
+# This configuration uses teamResults.do?teamId=... pages for discovery.
+# It is the most reliable and does NOT depend on league-wide listings.
+# Each "league" entry below corresponds to a specific tournament/season.
+# ------------------------------------------------------------------
+
+leagues:
+  - base_path: "https://cricclubs.com/HoustonPremierT20League"  # Base URL (no trailing slash)
+    club_id: 1366          # Found in every CricClubs URL
+    league_id: 25          # Optional; helps separate subfolders
+    team_id: 598           # Required for teamResults-based discovery
+
+  # Example of adding more tournaments:
+  # - base_path: "https://cricclubs.com/HoustonUnitedPremierLeague"
+  #   club_id: 1366
+  #   league_id: 32
+  #   team_id: 712
 
 # ------------------------------------------------------------------
-# OPTION 2: Multiple tournaments / seasons (recommended for teams
-# that play across multiple CricClubs leagues)
+# OPTIONAL SETTINGS
 # ------------------------------------------------------------------
-# Use the "leagues" list to specify multiple base paths.
-# The exporter will loop through each and download all matches.
+# If you wish to fetch only specific matches, you can provide:
+#   match_ids: [1861, 1843, 1841, 1796, 1783, 1777]
+# In that case, discovery via teamResults.do is skipped.
+#
+# If you play multiple seasons, simply add each one as a new item in
+# the 'leagues' list above, with its own base_path, club_id, league_id, and team_id.
 # ------------------------------------------------------------------
-leagues:
-  - base_path: "https://cricclubs.com/HoustonPremierT20League"
-    club_id: 1366
-    league_id: 25
-  - base_path: "https://cricclubs.com/HoustonPremierChampionsLeague"
-    club_id: 1366
-    league_id: 24
-  # You can mix league_id and explicit match_ids:
-  # - base_path: "https://cricclubs.com/SomeOtherLeague"
-  #   club_id: 999
-  #   match_ids: [1501, 1502, 1503]
 
 # ------------------------------------------------------------------
 # OPTIONAL: Player photo mapping file
-# Create a CSV file "players.csv" in repo root with:
+# Create a CSV file "players.csv" in the repo root with:
 #   name,photo_url
 #   John Smith,https://cricclubs.com/.../profilePic.jpg
 # ------------------------------------------------------------------
@@ -44,9 +46,8 @@ leagues:
 
 # ------------------------------------------------------------------
 # NOTES:
-# - All exported data will be saved under cricclubs_export_out/
-#   in subfolders named by league.
-# - analyze.py automatically merges data across all subfolders.
-# - Adjust team_name carefully; it must match how it's printed in
-#   CricClubs scorecards for accurate filtering.
+# - Data will be saved under cricclubs_export_out/<league>_<team_id>/
+# - analyze.py automatically merges data from all subfolders.
+# - Adjust team_name carefully; it must match your team on CricClubs
+#   for stats to filter correctly.
 # ------------------------------------------------------------------
