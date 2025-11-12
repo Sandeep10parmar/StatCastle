@@ -16,6 +16,7 @@ import requests
 import yaml
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
+import asyncio
 
 # Configuration will be loaded from config.yaml
 
@@ -111,8 +112,21 @@ def fetch_scorecard_rendered(url: str, context=None, base_path: str = None, leag
     
     for attempt in range(1, attempts+1):
         if not use_external_context:
-            pw = sync_playwright().start()
-            browser, context = new_context(pw, base_path, league_id, club_id)
+            try:
+                pw = sync_playwright().start()
+                browser, context = new_context(pw, base_path, league_id, club_id)
+            except Exception as e:
+                # If browser launch fails, it might be a path issue
+                if "Executable doesn't exist" in str(e) or "asyncio" in str(e).lower():
+                    with print_lock:
+                        print(f"    !! Playwright error: {e}")
+                        print(f"    !! This might be a browser installation issue. Try: playwright install chromium")
+                    last_err = e
+                    if attempt < attempts:
+                        time.sleep(2.0 * attempt)
+                        continue
+                    raise
+                raise
         else:
             browser = None  # External context manages browser
         
@@ -171,8 +185,19 @@ def fetch_ball_by_ball(match_id: int, base_path: str, club_id: int, context=None
     
     for attempt in range(1, attempts+1):
         if not use_external_context:
-            pw = sync_playwright().start()
-            browser, context = new_context(pw, base_path, league_id, club_id)
+            try:
+                pw = sync_playwright().start()
+                browser, context = new_context(pw, base_path, league_id, club_id)
+            except Exception as e:
+                if "Executable doesn't exist" in str(e) or "asyncio" in str(e).lower():
+                    with print_lock:
+                        print(f"    !! Playwright error: {e}")
+                    last_err = e
+                    if attempt < attempts:
+                        time.sleep(2.0 * attempt)
+                        continue
+                    raise
+                raise
         else:
             browser = None
         
@@ -228,52 +253,65 @@ def discover_match_ids(base_path: str, club_id: int, league_id: int, team_id: in
     url = f"{base_path}/teamResults.do?teamId={team_id}&league={league_id}&clubId={club_id}"
     last_err = None
     for attempt in range(1, attempts+1):
-        with sync_playwright() as pw:
-            browser, context = new_context(pw, base_path, league_id, club_id)
-            page = context.new_page()
-            try:
-                page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                # Wait for content to load
-                page.wait_for_timeout(2000)
-                # Scroll to ensure all content loads
-                for y in (800, 1600, 2400):
-                    page.mouse.wheel(0, y)
-                    page.wait_for_timeout(500)
-                html = page.content()
-                context.close()
-                browser.close()
-                
-                # Extract match IDs from links matching viewScorecard.do?matchId=XXXX
-                # Pattern: viewScorecard.do?clubId=XXXX&matchId=YYYY or viewScorecard.do?matchId=YYYY
-                match_ids = set()
-                # Try regex pattern to find all matchId parameters
-                patterns = [
-                    r'viewScorecard\.do\?[^"\'>]*matchId=(\d+)',
-                    r'matchId=(\d+)',
-                ]
-                for pattern in patterns:
-                    matches = re.findall(pattern, html, re.IGNORECASE)
-                    for match_id_str in matches:
-                        try:
-                            match_ids.add(int(match_id_str))
-                        except ValueError:
-                            continue
-                
-                if match_ids:
-                    match_ids_list = sorted(list(match_ids), reverse=True)  # Most recent first
-                    print(f"  -> discovered {len(match_ids_list)} match IDs: {match_ids_list}")
-                    return match_ids_list
-                else:
-                    raise RuntimeError("no match IDs found in teamResults page")
-            except Exception as e:
-                last_err = e
+        try:
+            with sync_playwright() as pw:
+                browser, context = new_context(pw, base_path, league_id, club_id)
+                page = context.new_page()
                 try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                    # Wait for content to load
+                    page.wait_for_timeout(2000)
+                    # Scroll to ensure all content loads
+                    for y in (800, 1600, 2400):
+                        page.mouse.wheel(0, y)
+                        page.wait_for_timeout(500)
+                    html = page.content()
+                    page.close()
                     context.close()
                     browser.close()
-                except Exception:
-                    pass
-                time.sleep(1.0 + attempt * 0.5)
-                continue
+                    
+                    # Extract match IDs from links matching viewScorecard.do?matchId=XXXX
+                    # Pattern: viewScorecard.do?clubId=XXXX&matchId=YYYY or viewScorecard.do?matchId=YYYY
+                    match_ids = set()
+                    # Try regex pattern to find all matchId parameters
+                    patterns = [
+                        r'viewScorecard\.do\?[^"\'>]*matchId=(\d+)',
+                        r'matchId=(\d+)',
+                    ]
+                    for pattern in patterns:
+                        matches = re.findall(pattern, html, re.IGNORECASE)
+                        for match_id_str in matches:
+                            try:
+                                match_ids.add(int(match_id_str))
+                            except ValueError:
+                                continue
+                    
+                    if match_ids:
+                        match_ids_list = sorted(list(match_ids), reverse=True)  # Most recent first
+                        print(f"  -> discovered {len(match_ids_list)} match IDs: {match_ids_list}")
+                        return match_ids_list
+                    else:
+                        raise RuntimeError("no match IDs found in teamResults page")
+                except Exception as e:
+                    last_err = e
+                    try:
+                        page.close()
+                        context.close()
+                        browser.close()
+                    except Exception:
+                        pass
+                    time.sleep(1.0 + attempt * 0.5)
+                    continue
+        except Exception as e:
+            if "Executable doesn't exist" in str(e) or "asyncio" in str(e).lower():
+                with print_lock:
+                    print(f"    !! Playwright error: {e}")
+                last_err = e
+                if attempt < attempts:
+                    time.sleep(2.0 * attempt)
+                    continue
+                raise
+            raise
     print(f"[warn] match discovery failed: {last_err}")
     return []
 
@@ -285,8 +323,19 @@ def fetch_match_info(match_id: int, base_path: str, club_id: int, context=None, 
     
     for attempt in range(1, attempts+1):
         if not use_external_context:
-            pw = sync_playwright().start()
-            browser, context = new_context(pw, base_path, league_id, club_id)
+            try:
+                pw = sync_playwright().start()
+                browser, context = new_context(pw, base_path, league_id, club_id)
+            except Exception as e:
+                if "Executable doesn't exist" in str(e) or "asyncio" in str(e).lower():
+                    with print_lock:
+                        print(f"    !! Playwright error: {e}")
+                    last_err = e
+                    if attempt < attempts:
+                        time.sleep(2.0 * attempt)
+                        continue
+                    raise
+                raise
         else:
             browser = None
         
@@ -468,6 +517,16 @@ def process_league(league_idx: int, league: dict):
     return len(records)
 
 def main():
+    # Ensure we're not in an asyncio event loop (Playwright sync API doesn't work with asyncio)
+    try:
+        loop = asyncio.get_running_loop()
+        print("[error] Cannot run Playwright sync API inside an asyncio event loop.")
+        print("[error] Please run this script outside of an asyncio context.")
+        return
+    except RuntimeError:
+        # No running loop, we're good
+        pass
+    
     # Load configuration
     config = load_config()
     leagues = config.get("leagues", [])

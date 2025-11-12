@@ -43,14 +43,19 @@ jobs:
         run: |
           python -m playwright install chromium
           python -m playwright install-deps chromium
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: 0  # Install to default location
+          # Verify installation
+          python -c "from playwright.sync_api import sync_playwright; pw = sync_playwright().start(); print('Playwright browser OK'); pw.stop()"
       - name: Verify config.yaml exists
         run: |
           if [ -f config.yaml ]; then
             echo "✓ config.yaml found"
             echo "Team name: $(grep '^team_name:' config.yaml | cut -d'"' -f2)"
-            echo "Number of leagues: $(grep -c '^- base_path:' config.yaml || echo '0')"
+            # Count leagues using Python for more reliable YAML parsing
+            league_count=$(python3 -c "import yaml; f=open('config.yaml'); c=yaml.safe_load(f); print(len(c.get('leagues', [])))" 2>/dev/null || echo "0")
+            echo "Number of leagues: $league_count"
+            if [ "$league_count" = "0" ]; then
+              echo "⚠️  WARNING: No leagues found in config.yaml"
+            fi
           else
             echo "✗ config.yaml not found!"
             exit 1
@@ -98,10 +103,23 @@ jobs:
         run: |
           echo "Starting analysis..."
           python analyze.py
+          echo ""
           echo "Analysis completed. Checking for generated files..."
           if ls team_dashboard/assets/*.json 1> /dev/null 2>&1; then
             echo "✓ JSON files generated:"
             ls -lh team_dashboard/assets/*.json
+            echo ""
+            echo "Checking file contents:"
+            for file in team_dashboard/assets/*.json; do
+              if [ -f "$file" ]; then
+                size=$(wc -c < "$file")
+                echo "  $(basename $file): $size bytes"
+                if [ "$size" -lt 50 ]; then
+                  echo "    ⚠️  WARNING: File is very small, showing content:"
+                  cat "$file"
+                fi
+              fi
+            done
           else
             echo "✗ No JSON files generated!"
             exit 1
