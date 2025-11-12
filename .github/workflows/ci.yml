@@ -36,10 +36,13 @@ jobs:
             pip install -r requirements.txt
           fi
           python -c "import yaml; print('PyYAML OK:', yaml.__version__)"
+          python -c "import playwright; print('Playwright OK:', playwright.__version__)"
       - name: Install Playwright browser
         run: |
           python -m playwright install chromium
           python -m playwright install-deps chromium
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: 0  # Install to default location
       - name: Fetch match data
         run: |
           python cricclubs_export.py
