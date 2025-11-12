@@ -16,7 +16,7 @@ team_dashboard/*.pdf
 team_dashboard/*.txt
 
 # Personal config (users should create from config.sample.yaml)
-config.yaml
+# config.yaml - Now committed to repo for GitHub Pages auto-deployment
 
 # macOS metadata
 .DS_Store

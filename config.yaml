@@ -1,0 +1,85 @@
+# =============================================
+# StatCastle - CricClubs Configuration
+# =============================================
+
+# Name of your team (must match how it appears on CricClubs scorecards)
+team_name: "Royals"
+
+# ------------------------------------------------------------------
+# TEAM-BASED EXPORT MODE (Recommended)
+# ------------------------------------------------------------------
+# This configuration uses teamResults.do?teamId=... pages for discovery.
+# It is the most reliable and does NOT depend on league-wide listings.
+# Each "league" entry below corresponds to a specific tournament/season.
+# ------------------------------------------------------------------
+
+leagues:
+  - base_path: "https://cricclubs.com/HoustonPremierT20League"  # Base URL (no trailing slash)
+    club_id: 1366          # Found in every CricClubs URL
+    league_id: 25          # Optional; helps separate subfolders
+    team_id: 598           # Required for teamResults-based discovery
+    match_ids: [1872, 1861, 1843, 1841, 1796, 1793, 1783, 1777]
+
+  - base_path: "https://cricclubs.com/HoustonUnitedPremierLeague"  # Base URL (no trailing slash)
+    club_id: 13647          # Found in every CricClubs URL
+    league_id: 32          # Optional; helps separate subfolders
+    team_id: 276           # Required for teamResults-based discovery
+
+  - base_path: "https://cricclubs.com/HoustonPremierT20League"  # Base URL (no trailing slash)
+    club_id: 1366          # Found in every CricClubs URL
+    league_id: 24          # Optional; helps separate subfolders
+    team_id: 571           # Required for teamResults-based discovery
+
+  - base_path: "https://cricclubs.com/HoustonPremierT20League"  # Base URL (no trailing slash)
+    club_id: 1366          # Found in every CricClubs URL
+    league_id: 23          # Optional; helps separate subfolders
+    team_id: 539           # Required for teamResults-based discovery
+
+  - base_path: "https://cricclubs.com/HoustonPremierT20League"  # Base URL (no trailing slash)
+    club_id: 1366          # Found in every CricClubs URL
+    league_id: 22          # Optional; helps separate subfolders
+    team_id: 508           # Required for teamResults-based discovery
+
+  - base_path: "https://cricclubs.com/HoustonUnitedPremierLeague"  # Base URL (no trailing slash)
+    club_id: 13647          # Found in every CricClubs URL
+    league_id: 27          # Optional; helps separate subfolders
+    team_id: 227           # Required for teamResults-based discovery
+
+  - base_path: "https://cricclubs.com/HoustonUnitedPremierLeague"  # Base URL (no trailing slash)
+    club_id: 13647          # Found in every CricClubs URL
+    league_id: 23          # Optional; helps separate subfolders
+    team_id: 201           # Required for teamResults-based discovery
+
+  # Example of adding more tournaments:
+  # - base_path: "https://cricclubs.com/HoustonUnitedPremierLeague"
+  #   club_id: 1366
+  #   league_id: 32
+  #   team_id: 712
+
+# ------------------------------------------------------------------
+# OPTIONAL SETTINGS
+# ------------------------------------------------------------------
+# If you wish to fetch only specific matches, you can provide:
+#   match_ids: [1861, 1843, 1841, 1796, 1783, 1777]
+# In that case, discovery via teamResults.do is skipped.
+#
+# If you play multiple seasons, simply add each one as a new item in
+# the 'leagues' list above, with its own base_path, club_id, league_id, and team_id.
+# ------------------------------------------------------------------
+
+# ------------------------------------------------------------------
+# OPTIONAL: Player photo mapping file
+# Create a CSV file "players.csv" in the repo root with:
+#   name,photo_url
+#   John Smith,https://cricclubs.com/.../profilePic.jpg
+# ------------------------------------------------------------------
+
+players_csv: "players.csv"
+
+# ------------------------------------------------------------------
+# NOTES:
+# - Data will be saved under cricclubs_export_out/<league>_<team_id>/
+# - analyze.py automatically merges data from all subfolders.
+# - Adjust team_name carefully; it must match your team on CricClubs
+#   for stats to filter correctly.
+# ------------------------------------------------------------------
