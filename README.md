@@ -1,58 +1,206 @@
-# 🏏 Team Analytics — CricClubs Tournament Insights
+# 🏏 StatCastle — CricClubs Tournament Insights
 
-**Automatically analyze your CricClubs team’s performance** — fetch match data, generate stats, and visualize results in a web dashboard and PDF report.
+**Automatically analyze your CricClubs team's performance** — fetch match data, generate stats, and visualize results in a web dashboard and PDF report.
 
-> 💡 No admin access required. Just your team’s CricClubs URL.
+> 💡 No admin access required. Just your team's CricClubs URL.  
+> 🐳 **Run in minutes with Docker** — no local setup needed!
 
 ---
 
-## ⚡️ Quick Start
+## ⚡️ Quick Start (Docker - Recommended)
+
+Get StatCastle running in minutes:
 
 ```bash
-# 1️⃣ Clone and install dependencies
-git clone https://github.com/<your-username>/team_analytics.git
-cd team_analytics
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+# 1️⃣ Clone the repository
+git clone https://github.com/<your-username>/statcastle.git
+cd statcastle
 
-# 2️⃣ Configure your CricClubs team
+# 2️⃣ Configure your team
 cp config.sample.yaml config.yaml
-# then edit config.yaml with your team_id, club_id, league_id
+# Edit config.yaml with your team_id, club_id, league_id
 
-# 3️⃣ Run analysis
-python cricclubs_export.py && python analyze.py
-open team_dashboard/index.html
+# 3️⃣ Run with Docker Compose
+docker-compose up
+
+# ✅ Done! Check team_dashboard/ for your results
 ```
 
-✅ You’ll get:
-- `index.html` — interactive dashboard  
-- `Team_Stats_Summary.pdf` — printable report  
-- `summary.txt` — quick textual summary
+**That's it!** Your dashboard will be generated in `team_dashboard/index.html`.
+
+### What You Get
+
+- 📊 **Interactive Dashboard** (`team_dashboard/index.html`) — Modern web interface with filters
+- 📄 **PDF Report** (`team_dashboard/Team_Stats_Summary.pdf`) — Printable summary
+- 📝 **Text Summary** (`team_dashboard/summary.txt`) — Quick overview
 
 ---
 
 ## 🚀 Features
 
-| Capability | Description |
-|-------------|--------------|
+### Core Capabilities
+
+| Feature | Description |
+|---------|-------------|
 | 🧠 **Team-based discovery** | Uses `teamResults.do` pages for reliable match fetching — no league admin needed |
-| 📊 **Automated analysis** | Generates batting, bowling, and team-level insights |
-| 🧩 **Multi-tournament support** | Combine multiple CricClubs seasons for one team |
-| 👤 **Player insights** | Dropdown to view per-player stats (runs, strike rate, wickets, etc.) |
-| 📍 **Ground-level analytics** | Win-rate and trends by venue |
-| 🧾 **PDF report** | Auto-generated `Team_Stats_Summary.pdf` |
-| 🌐 **GitHub Pages ready** | Share dashboards publicly via Pages hosting |
+| 📊 **Automated analysis** | Generates batting, bowling, and team-level insights automatically |
+| 🧩 **Multi-tournament support** | Combine multiple CricClubs seasons for one team in a single analysis |
+| 🌐 **GitHub Pages ready** | Auto-deploy dashboards publicly via GitHub Pages |
+
+### Dashboard Features
+
+#### Home Page
+- **Recent Match Results** — Last 5 matches with opponent, result, ground, series
+- **Top 5 Batsmen** — Best strike rate, most runs, most 4s, most 6s
+- **Top 5 Bowlers** — Most wickets, best economy, best strike rate, most dot balls
+- **Player of the Match** — Recent MoM awards
+
+#### Team Stats Page
+- **Win Percentage** — Overall team win rate
+- **Win Rate Over Time** — Visual chart showing performance trends
+- **Win Rate by Ground** — Performance breakdown by venue
+- **Win Rate by Toss Outcome** — Stats when batting first vs bowling first
+- **Win Rate by Match Type** — League vs Playoff performance
+
+#### Player Stats Page
+- **Player Dropdown** — Select any player to view detailed stats
+- **Player Card** — Profile picture, aggregated batting & bowling stats
+- **Batting by Position** — Strike rate and average for each batting position
+- **Recent Performances** — Last 5 batting innings and bowling spells
+- **Man of the Match Awards** — All matches where player was PoM
+
+#### Advanced Filtering
+- **Date Range Picker** — Filter by match date (default: last 30 days)
+- **Series Multi-Select** — Filter by tournament/series
+- **Auto-apply Toggle** — Real-time filtering as you change settings
+- **Filter Presets** — Quick access to "Last 5 matches", "This season", "Last 3 months", "All time"
+
+### Analytics Generated
+
+- Top 5 batsmen (runs, strike rate, boundaries)
+- Top 5 bowlers (wickets, economy, strike rate)
+- Dot-ball % leaderboard
+- Win-rate by ground, toss outcome, and match type
+- Per-player breakdown with position analysis
+- Aggregated performance across multiple tournaments
+- Match results with full context (opponent, ground, series, toss)
+
+---
+
+## 🐳 Docker Deployment
+
+Docker is the **recommended** way to run StatCastle. It handles all dependencies automatically.
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) installed
+- Docker Compose (included with Docker Desktop)
+
+### Quick Start
+
+```bash
+# Configure your team
+cp config.sample.yaml config.yaml
+# Edit config.yaml with your team details
+
+# Run the full pipeline
+docker-compose up
+```
+
+### Manual Docker Commands
+
+```bash
+# Build the image
+docker build -t statcastle:latest .
+
+# Run export and analysis
+docker run --rm \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  -v $(pwd)/cricclubs_export_out:/app/cricclubs_export_out \
+  -v $(pwd)/team_dashboard:/app/team_dashboard \
+  statcastle:latest \
+  sh -c "python3 cricclubs_export.py && python3 analyze.py"
+```
+
+### Environment Variables
+
+Customize behavior with environment variables:
+
+```bash
+docker run --rm \
+  -e HEADLESS=1 \
+  -e MAX_LEAGUE_WORKERS=3 \
+  -e MAX_MATCH_WORKERS=4 \
+  -e MATCH_DELAY=0.3 \
+  -v $(pwd)/config.yaml:/app/config.yaml:ro \
+  statcastle:latest \
+  python3 cricclubs_export.py
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HEADLESS` | `1` | Run Playwright in headless mode (0 for visible browser) |
+| `MAX_LEAGUE_WORKERS` | `3` | Parallel leagues to process |
+| `MAX_MATCH_WORKERS` | `4` | Parallel matches per league |
+| `MATCH_DELAY` | `0.3` | Delay between match requests (seconds) |
+| `FORCE_REFRESH` | `0` | Force re-fetch even if data exists |
+
+**📖 For detailed Docker and Kubernetes deployment instructions, see [DOCKER.md](DOCKER.md)**
+
+---
+
+## 💻 Local Setup (Alternative)
+
+If you prefer running locally without Docker:
+
+### Prerequisites
+
+- Python 3.11 or higher
+- pip (Python package manager)
+
+### Installation
+
+```bash
+# 1️⃣ Clone and setup
+git clone https://github.com/<your-username>/statcastle.git
+cd statcastle
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# 2️⃣ Install dependencies
+pip install -r requirements.txt
+playwright install chromium
+
+# 3️⃣ Configure your team
+cp config.sample.yaml config.yaml
+# Edit config.yaml with your team_id, club_id, league_id
+
+# 4️⃣ Run analysis
+python3 cricclubs_export.py && python3 analyze.py
+
+# 5️⃣ Open dashboard
+open team_dashboard/index.html  # macOS
+# Or: xdg-open team_dashboard/index.html  # Linux
+```
 
 ---
 
 ## ⚙️ Configuration
 
-Copy the sample config and edit it:
-```bash
-cp config.sample.yaml config.yaml
-```
+### Finding Your Team IDs
+
+1. Open your team's CricClubs URL:
+   ```
+   https://cricclubs.com/HoustonPremierT20League/teamResults.do?teamId=598&league=25&clubId=1366
+   ```
+
+2. Extract from URL:
+   - `teamId=598` → `team_id: 598`
+   - `league=25` → `league_id: 25`
+   - `clubId=1366` → `club_id: 1366`
 
 ### Example `config.yaml`
+
 ```yaml
 team_name: "Royals"
 
@@ -61,110 +209,223 @@ leagues:
     club_id: 1366
     league_id: 25
     team_id: 598
+
+  # Add more tournaments to combine data
+  - base_path: "https://cricclubs.com/HoustonUnitedPremierLeague"
+    club_id: 1366
+    league_id: 32
+    team_id: 712
 ```
 
-> 🔍 **Find your team_id**  
-> Open your team’s CricClubs URL like  
-> `https://cricclubs.com/HoustonPremierT20League/teamResults.do?teamId=598&league=25&clubId=1366`  
-> → `teamId=598` is your team ID.
+### Optional Settings
 
-#### Customize
-- Replace `team_dashboard/assets/royals_logo.png` with your team logo (optional).
----
-
-## 📊 Outputs
-
-```
-cricclubs_export_out/
-  ├─ HoustonPremierT20League_25/
-  │   └─ matches.json
-team_dashboard/
-  ├─ index.html
-  ├─ Team_Stats_Summary.pdf
-  └─ summary.txt
+**Player Photos:**
+```yaml
+players_csv: "players.csv"  # CSV with name,photo_url columns
 ```
 
-Open the dashboard:
-```bash
-open team_dashboard/index.html
+**Specific Matches Only:**
+```yaml
+leagues:
+  - base_path: "..."
+    match_ids: [1861, 1843, 1841]  # Skip discovery, fetch only these
 ```
 
----
-
-## 🧠 Insights Generated
-
-- Top 5 batsmen (runs, strike rate, boundaries)
-- Top 5 bowlers (wickets, economy)
-- Dot-ball % leaderboard
-- Win-rate by ground
-- Common themes in matches lost
-- Per-player breakdown via dropdown
-- Aggregated performance across tournaments
+**Customize Team Logo:**
+- Replace `team_dashboard/assets/Royals_Logo.png` with your logo
+- Or add logo path in config (if supported)
 
 ---
 
-## 🌐 GitHub Pages Hosting
-
-You can make your dashboard publicly shareable via **GitHub Pages**:
-
-1. Commit and push the generated `team_dashboard/` folder  
-2. Go to **Settings → Pages**  
-3. Choose **Source → GitHub Actions** (or `/ (root)` if available)  
-4. Your dashboard will be available at:  
-   ```
-   https://<your-username>.github.io/team_analytics/
-   ```
-
----
-
-## 🧩 Optional Enhancements
-
-| Feature | How to enable |
-|----------|----------------|
-| 🖼 Player photos | Add `players_csv: "players.csv"` to config, and create `name,photo_url` mapping |
-| 🎯 Specific matches | Add `match_ids: [1861, 1843, 1841]` under a league |
-| 🧵 Multi-tournament merge | Add more league blocks in `config.yaml` |
-| 🔁 Retry/backoff | (optional) Improves reliability for large datasets |
-
----
-
-## 🧰 Folder Structure
+## 📊 Output Structure
 
 ```
-team_analytics/
+statcastle/
+├── cricclubs_export_out/      # Raw scraped data (gitignored)
+│   └── [LeagueName]_[ID]/
+│       └── matches.json
 │
-├── cricclubs_export.py         # Fetch data from CricClubs (teamResults-based)
-├── analyze.py                  # Compute stats, build dashboard
-├── summary_report.py           # Create summary text/PDF
-├── config.sample.yaml          # Template configuration
-├── team_dashboard/             # Generated outputs
-│   ├── index.html
-│   ├── assets/
-│   ├── Team_Stats_Summary.pdf
-│   └── summary.txt
-└── cricclubs_export_out/       # Raw match data
+└── team_dashboard/            # Generated outputs
+    ├── index.html             # Interactive dashboard ⭐
+    ├── Team_Stats_Summary.pdf  # PDF report
+    ├── summary.txt            # Text summary
+    ├── batting_stats.csv      # Aggregated batting stats
+    ├── bowling_stats.csv      # Aggregated bowling stats
+    └── assets/
+        ├── dashboard.css      # Dashboard styles
+        ├── dashboard.js        # Dashboard logic
+        ├── *.json              # Data files (generated)
+        └── [team-logo].png     # Team logo (optional)
 ```
 
 ---
 
-## 🧾 Version History
+## 🌐 GitHub Pages Deployment
 
-| Version | Change |
-|----------|---------|
-| **v1.0** | League-based discovery (deprecated) |
-| **v1.1** | Switched to team-based `teamResults.do` discovery |
-| **v1.2** | Added player dropdown insights & multi-tournament merge |
+StatCastle automatically deploys your dashboard to GitHub Pages on every push to `main`.
+
+### Setup (One-Time)
+
+1. **Enable GitHub Pages:**
+   - Go to repository **Settings → Pages**
+   - Source: **GitHub Actions**
+
+2. **Push to main branch:**
+   ```bash
+   git add .
+   git commit -m "Update dashboard"
+   git push origin main
+   ```
+
+3. **Access your dashboard:**
+   ```
+   https://<your-username>.github.io/statcastle/team_dashboard/
+   ```
+
+### Auto-Deployment
+
+The `.github/workflows/ci.yml` workflow:
+- ✅ Runs on every push to `main`
+- ✅ Builds dashboard and PDF
+- ✅ Deploys to GitHub Pages automatically
+- ✅ Scheduled runs (every Monday at 12:00 UTC)
+
+**Note:** The workflow uses Python directly (not Docker) for GitHub Actions compatibility.
+
+---
+
+## 🧩 Advanced Usage
+
+### Multi-Tournament Analysis
+
+Combine data from multiple seasons:
+
+```yaml
+leagues:
+  - base_path: "https://cricclubs.com/League2023"
+    club_id: 1366
+    league_id: 25
+    team_id: 598
+  - base_path: "https://cricclubs.com/League2024"
+    club_id: 1366
+    league_id: 32
+    team_id: 598  # Same team, different season
+```
+
+### Scheduled Updates
+
+**Using Docker:**
+```bash
+# Add to crontab for weekly updates
+0 2 * * 1 cd /path/to/statcastle && docker-compose up
+```
+
+**Using Kubernetes:**
+See [DOCKER.md](DOCKER.md) for CronJob examples.
+
+### Custom Player Photos
+
+1. Create `players.csv`:
+   ```csv
+   Name,PhotoURL
+   John Smith,https://cricclubs.com/.../profilePic.jpg
+   ```
+
+2. Add to `config.yaml`:
+   ```yaml
+   players_csv: "players.csv"
+   ```
+
+---
+
+## 🧰 Project Structure
+
+```
+statcastle/
+│
+├── cricclubs_export.py    # Fetch data from CricClubs
+├── analyze.py             # Compute stats, build dashboard
+├── summary_report.py      # Generate PDF/text reports
+│
+├── config.sample.yaml     # Configuration template
+├── requirements.txt       # Python dependencies
+│
+├── Dockerfile             # Multi-stage Docker build
+├── docker-compose.yml    # Docker Compose configuration
+├── .dockerignore          # Docker build exclusions
+│
+├── team_dashboard/        # Generated outputs
+│   ├── index.html         # Dashboard (source + generated)
+│   ├── assets/            # CSS, JS, data files
+│   └── *.pdf, *.txt       # Reports
+│
+├── .github/
+│   └── workflows/
+│       └── ci.yml         # GitHub Actions (auto-deploy)
+│
+├── DOCKER.md              # Docker & K8s deployment guide
+├── DEPLOYMENT.md          # Comprehensive deployment docs
+└── README.md              # This file
+```
 
 ---
 
 ## 🧩 Troubleshooting
 
-| Issue | Fix |
-|-------|-----|
-| `Found 0 matches` | Check your `team_id`, `league_id`, and `club_id` in config |
-| `ModuleNotFoundError: yaml` | Run `pip install -r requirements.txt` again |
-| `NotOpenSSLWarning` | Harmless; upgrade to Python 3.12+ to remove it |
-| Empty PDF | Ensure matches.json contains at least one scorecard |
+### Common Issues
+
+| Issue | Solution |
+|-------|----------|
+| `Found 0 matches` | Check `team_id`, `league_id`, and `club_id` in config.yaml |
+| `ModuleNotFoundError` | Run `pip install -r requirements.txt` (or use Docker) |
+| `Playwright browser not found` | Run `playwright install chromium` (or use Docker) |
+| Empty dashboard | Run `python3 analyze.py` to generate JSON files |
+| Docker build fails | Ensure Docker has enough memory (2GB+) |
+| GitHub Pages not updating | Check Actions tab for workflow errors |
+
+### Getting Help
+
+1. Check [DEPLOYMENT.md](DEPLOYMENT.md) for detailed troubleshooting
+2. Review [DOCKER.md](DOCKER.md) for Docker-specific issues
+3. Check GitHub Issues for known problems
+4. Verify your `config.yaml` matches the sample format
+
+---
+
+## 📚 Documentation
+
+- **[DOCKER.md](DOCKER.md)** — Docker usage and Kubernetes deployment
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** — Comprehensive deployment guide
+- **[CHANGELOG.md](CHANGELOG.md)** — Version history and changes
+- **[TESTING.md](TESTING.md)** — Testing guide for developers
+
+---
+
+## 🧾 Version History
+
+| Version | Changes |
+|---------|---------|
+| **v1.3** | Docker support, updated README, K8s examples |
+| **v1.2** | Player dropdown insights, multi-tournament merge, enhanced analytics |
+| **v1.1** | Team-based `teamResults.do` discovery |
+| **v1.0** | Initial release (league-based discovery, deprecated) |
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+---
+
+## 📄 License
+
+[Add your license here]
 
 ---
 
@@ -172,3 +433,12 @@ team_analytics/
 
 Built by cricket enthusiasts for cricket enthusiasts 🏏  
 Easily adaptable for any CricClubs-hosted league or tournament.
+
+---
+
+## 🚀 Quick Links
+
+- 🐳 [Docker Guide](DOCKER.md)
+- 📖 [Deployment Guide](DEPLOYMENT.md)
+- 🧪 [Testing Guide](TESTING.md)
+- 📝 [Changelog](CHANGELOG.md)

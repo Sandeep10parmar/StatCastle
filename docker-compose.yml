@@ -1,0 +1,34 @@
+version: '3.8'
+
+services:
+  statcastle:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: statcastle:latest
+    container_name: statcastle
+    volumes:
+      # Mount config file (create from config.sample.yaml first)
+      - ./config.yaml:/app/config.yaml:ro
+      # Mount output directories to persist data
+      - ./cricclubs_export_out:/app/cricclubs_export_out
+      - ./team_dashboard:/app/team_dashboard
+      # Optional: mount players.csv if you have one
+      - ./players.csv:/app/players.csv:ro
+    environment:
+      - HEADLESS=1
+      - MAX_LEAGUE_WORKERS=3
+      - MAX_MATCH_WORKERS=4
+      - MATCH_DELAY=0.3
+      - FORCE_REFRESH=0
+    # Override default command to run the export and analysis
+    command: >
+      sh -c "
+        echo 'Starting StatCastle...' &&
+        python3 cricclubs_export.py &&
+        python3 analyze.py &&
+        echo 'Analysis complete! Check team_dashboard/ for results.'
+      "
+    # For interactive use, you can override with:
+    # docker-compose run --rm statcastle /bin/bash
+

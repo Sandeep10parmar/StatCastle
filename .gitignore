@@ -1,8 +1,39 @@
 # Python venv
 .venv/
+venv/
+ENV/
+env/
 
 # Raw scraped data (not needed in repo)
 cricclubs_export_out/
 
+# Generated outputs (should not be committed)
+team_dashboard/assets/*.json
+team_dashboard/assets/*.csv
+team_dashboard/assets/_debug_*.csv
+team_dashboard/*.csv
+team_dashboard/*.pdf
+team_dashboard/*.txt
+
+# Personal config (users should create from config.sample.yaml)
+config.yaml
+
 # macOS metadata
 .DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Docker
+.docker/

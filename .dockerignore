@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Generated outputs (should not be in image)
+cricclubs_export_out/
+team_dashboard/assets/*.json
+team_dashboard/assets/*.csv
+team_dashboard/*.csv
+team_dashboard/*.pdf
+team_dashboard/*.txt
+team_dashboard/assets/_debug_*.csv
+
+# Personal config (users should create their own)
+config.yaml
+
+# Documentation (not needed in image)
+*.md
+!README.md
+.github/
+TESTING*.md
+
+# Test files
+test_*.py
+
+# Examples (optional, but not needed in base image)
+examples/
+
+# Docker files themselves
+Dockerfile
+docker-compose.yml
+.dockerignore
+

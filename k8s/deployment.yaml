@@ -1,0 +1,186 @@
+# Kubernetes Deployment Examples for StatCastle
+# 
+# This file contains example Kubernetes manifests for deploying StatCastle
+# See DOCKER.md for detailed usage instructions
+
+---
+# ConfigMap for StatCastle configuration
+# Create this from your config.yaml:
+#   kubectl create configmap statcastle-config --from-file=config.yaml=./config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: statcastle-config
+  labels:
+    app: statcastle
+data:
+  # config.yaml will be mounted here
+  # Note: Replace this with your actual config.yaml content
+  config.yaml: |
+    team_name: "YourTeam"
+    leagues:
+      - base_path: "https://cricclubs.com/YourLeague"
+        club_id: 1366
+        league_id: 25
+        team_id: 598
+
+---
+# PersistentVolumeClaim for export data
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: statcastle-export-pvc
+  labels:
+    app: statcastle
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# PersistentVolumeClaim for dashboard output
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: statcastle-dashboard-pvc
+  labels:
+    app: statcastle
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# One-time Job to run analysis
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: statcastle-analysis
+  labels:
+    app: statcastle
+spec:
+  template:
+    metadata:
+      labels:
+        app: statcastle
+    spec:
+      containers:
+      - name: statcastle
+        image: statcastle:latest  # Replace with your image registry
+        imagePullPolicy: IfNotPresent
+        command:
+          - sh
+          - -c
+          - |
+            echo "Starting StatCastle analysis..."
+            python3 cricclubs_export.py &&
+            python3 analyze.py &&
+            echo "Analysis complete!"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+          readOnly: true
+        - name: export-out
+          mountPath: /app/cricclubs_export_out
+        - name: dashboard
+          mountPath: /app/team_dashboard
+        env:
+        - name: HEADLESS
+          value: "1"
+        - name: MAX_LEAGUE_WORKERS
+          value: "3"
+        - name: MAX_MATCH_WORKERS
+          value: "4"
+        - name: MATCH_DELAY
+          value: "0.3"
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1000m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+      volumes:
+      - name: config
+        configMap:
+          name: statcastle-config
+      - name: export-out
+        persistentVolumeClaim:
+          claimName: statcastle-export-pvc
+      - name: dashboard
+        persistentVolumeClaim:
+          claimName: statcastle-dashboard-pvc
+      restartPolicy: Never
+  backoffLimit: 3
+
+---
+# CronJob for scheduled weekly updates
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: statcastle-weekly
+  labels:
+    app: statcastle
+spec:
+  schedule: "0 2 * * 1"  # Every Monday at 2 AM UTC
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: statcastle
+        spec:
+          containers:
+          - name: statcastle
+            image: statcastle:latest  # Replace with your image registry
+            imagePullPolicy: IfNotPresent
+            command:
+              - sh
+              - -c
+              - |
+                echo "Starting weekly StatCastle update..."
+                python3 cricclubs_export.py &&
+                python3 analyze.py &&
+                echo "Weekly update complete!"
+            volumeMounts:
+            - name: config
+              mountPath: /app/config.yaml
+              subPath: config.yaml
+              readOnly: true
+            - name: export-out
+              mountPath: /app/cricclubs_export_out
+            - name: dashboard
+              mountPath: /app/team_dashboard
+            env:
+            - name: HEADLESS
+              value: "1"
+            - name: MAX_LEAGUE_WORKERS
+              value: "3"
+            - name: MAX_MATCH_WORKERS
+              value: "4"
+            resources:
+              requests:
+                memory: "2Gi"
+                cpu: "1000m"
+              limits:
+                memory: "4Gi"
+                cpu: "2000m"
+          volumes:
+          - name: config
+            configMap:
+              name: statcastle-config
+          - name: export-out
+            persistentVolumeClaim:
+              claimName: statcastle-export-pvc
+          - name: dashboard
+            persistentVolumeClaim:
+              claimName: statcastle-dashboard-pvc
+          restartPolicy: OnFailure
+

@@ -36,9 +36,18 @@ jobs:
             pip install -r requirements.txt
           fi
           python -c "import yaml; print('PyYAML OK:', yaml.__version__)"
+      - name: Install Playwright browser
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
+      - name: Fetch match data
+        run: |
+          python cricclubs_export.py
+        continue-on-error: true  # Continue even if export fails (may not have config.yaml in CI)
       - name: Build dashboard & PDF
         run: |
           python analyze.py
+        continue-on-error: true  # Continue even if analysis fails (may not have data)
       - name: Upload dashboard artifact (for Pages)
         uses: actions/upload-pages-artifact@v3
         with:

@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="pageTitle">StatCastle</title>
+<link rel="stylesheet" href="assets/dashboard.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<nav class="nav" role="navigation" aria-label="Main navigation">
+  <div class="nav-logo-container">
+    <img id="teamLogo" class="nav-logo" alt="" src="" aria-hidden="true">
+    <h1 style="margin:0" id="dashboardTitle">StatCastle</h1>
+  </div>
+  <div role="tablist" aria-label="Dashboard sections">
+    <button class="nav-btn active" data-page="home" role="tab" aria-selected="true" aria-controls="home">Home</button>
+    <button class="nav-btn" data-page="team" role="tab" aria-selected="false" aria-controls="team">Team Stats</button>
+    <button class="nav-btn" data-page="player" role="tab" aria-selected="false" aria-controls="player">Player Stats</button>
+  </div>
+</nav>
+
+<!-- Common Filters -->
+<section class="filters" aria-label="Filter dashboard data">
+  <div class="filter-controls-row">
+    <label for="autoApplyToggle" class="toggle-label">
+      <input type="checkbox" id="autoApplyToggle" aria-label="Auto-apply filters">
+      <span>Auto-apply filters</span>
+    </label>
+    <div class="filter-presets">
+      <button type="button" class="preset-btn" data-preset="last5">Last 5 matches</button>
+      <button type="button" class="preset-btn" data-preset="season">This season</button>
+      <button type="button" class="preset-btn" data-preset="last3months">Last 3 months</button>
+      <button type="button" class="preset-btn" data-preset="alltime">All time</button>
+    </div>
+  </div>
+  <div class="active-filters" id="activeFilters" aria-live="polite"></div>
+  <div class="filter-inputs-row">
+    <label for="startDate">
+      Start Date
+      <input type="date" id="startDate" aria-label="Start date filter">
+    </label>
+    <label for="endDate">
+      End Date
+      <input type="date" id="endDate" aria-label="End date filter">
+    </label>
+    <label for="seriesSelect">
+      Series
+      <select id="seriesSelect" multiple aria-label="Series filter" aria-multiselectable="true"></select>
+    </label>
+    <div class="filter-buttons">
+      <button id="clearFiltersBtn" type="button">Clear Filters</button>
+      <button id="applyFiltersBtn" type="button">Apply Filters</button>
+    </div>
+  </div>
+</section>
+
+<!-- Home Page -->
+<main id="home" class="page active" role="tabpanel" aria-labelledby="home-tab">
+  <h2>Recent Team Form</h2>
+  <div class="table-wrapper">
+    <table class="data-table" id="last5Results" aria-label="Recent team match results">
+      <thead>
+        <tr><th>Date</th><th>Opponent</th><th>Result</th><th>Match Type</th><th>Ground</th><th>Series</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Top 5 Batsmen</h2>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <h3>Best Strike Rate (min 20 balls)</h3>
+      <ul class="top-list" id="topSR"></ul>
+    </div>
+    <div class="stat-card">
+      <h3>Most Runs</h3>
+      <ul class="top-list" id="topRuns"></ul>
+    </div>
+    <div class="stat-card">
+      <h3>Most 4s</h3>
+      <ul class="top-list" id="top4s"></ul>
+    </div>
+    <div class="stat-card">
+      <h3>Most 6s</h3>
+      <ul class="top-list" id="top6s"></ul>
+    </div>
+  </div>
+
+  <h2>Top 5 Bowlers</h2>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <h3>Most Wickets</h3>
+      <ul class="top-list" id="topWickets"></ul>
+    </div>
+    <div class="stat-card">
+      <h3>Most Dot% Bowled</h3>
+      <ul class="top-list" id="topDots"></ul>
+    </div>
+    <div class="stat-card">
+      <h3>Best Economy</h3>
+      <ul class="top-list" id="topEcon"></ul>
+    </div>
+    <div class="stat-card">
+      <h3>Best Strike Rate</h3>
+      <ul class="top-list" id="topBowlSR"></ul>
+    </div>
+  </div>
+
+  <h2>Recent MoM</h2>
+  <div id="pomSection"></div>
+</main>
+
+<!-- Team Stats Page -->
+<main id="team" class="page" role="tabpanel" aria-labelledby="team-tab">
+  <h2>Team Statistics</h2>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <h3>Win Percentage</h3>
+      <div class="value" id="winPct" aria-live="polite">-</div>
+    </div>
+  </div>
+
+  <h2>Win Rate Over Time</h2>
+  <div class="chart-container">
+    <canvas id="winRateChart" aria-label="Win rate trend over time"></canvas>
+  </div>
+
+  <h2>Win Rate by Ground</h2>
+  <div class="table-wrapper">
+    <table class="data-table" id="winByGround" aria-label="Win rate statistics by ground">
+      <thead>
+        <tr><th>Ground</th><th>Wins</th><th>Losses</th><th>Draws</th><th>Win %</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Win Rate by Toss Outcome</h2>
+  <div class="table-wrapper">
+    <table class="data-table" id="winByToss" aria-label="Win rate statistics by toss outcome">
+      <thead>
+        <tr><th>Toss Decision</th><th>Wins</th><th>Losses</th><th>Draws</th><th>Win %</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h2>Win Rate by Match Type</h2>
+  <div class="table-wrapper">
+    <table class="data-table" id="winByMatchType" aria-label="Win rate statistics by match type">
+      <thead>
+        <tr><th>Match Type</th><th>Wins</th><th>Losses</th><th>Draws</th><th>Win %</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</main>
+
+<!-- Player Stats Page -->
+<main id="player" class="page" role="tabpanel" aria-labelledby="player-tab">
+  <h2>Player Statistics</h2>
+  <div class="filters" style="margin-top:0">
+    <label for="playerSelect">
+      Select Player
+      <select id="playerSelect" aria-label="Select player to view statistics"></select>
+    </label>
+  </div>
+
+  <div id="playerCard" class="player-card" style="display:none" role="region" aria-label="Player statistics">
+    <img id="playerPhoto" alt="" src="" loading="lazy">
+    <div style="flex:1">
+      <div><b id="pi_name" style="font-size:20px">—</b></div>
+      <div style="margin-top:8px">
+        <strong>Batting:</strong> Runs: <b id="pi_runs">-</b> | SR: <b id="pi_sr">-</b> | Avg: <b id="pi_avg">-</b> | Dot%: <b id="pi_bat_dot">-</b> | 4s: <b id="pi_4s">-</b> | 6s: <b id="pi_6s">-</b>
+      </div>
+      <div>
+        <strong>Bowling:</strong> Wickets: <b id="pi_wk">-</b> | Overs: <b id="pi_overs">-</b> | Econ: <b id="pi_econ">-</b> | Dot%: <b id="pi_bowl_dot">-</b>
+      </div>
+    </div>
+  </div>
+
+  <h3>Batting by Position</h3>
+  <div class="table-wrapper">
+    <table class="data-table" id="positionStats" aria-label="Batting statistics by batting position">
+      <thead>
+        <tr><th>Position</th><th>Innings</th><th>Runs</th><th>Balls</th><th>SR</th><th>Avg</th><th>Outs</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h3>Dismissal Types</h3>
+  <ul class="top-list" id="dismissalStats" aria-label="Dismissal type statistics"></ul>
+
+  <h3>Performance Trends</h3>
+  <div class="performance-charts-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:24px">
+    <div class="chart-container">
+      <canvas id="battingTrendChart" aria-label="Batting performance trend over time"></canvas>
+    </div>
+    <div class="chart-container">
+      <canvas id="bowlingTrendChart" aria-label="Bowling performance trend over time"></canvas>
+    </div>
+  </div>
+
+  <h3>Recent Performances</h3>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px">
+    <div>
+      <h4>Recent Batting</h4>
+      <ul class="top-list" id="recentBatting" aria-label="Recent batting performances"></ul>
+    </div>
+    <div>
+      <h4>Recent Bowling</h4>
+      <ul class="top-list" id="recentBowling" aria-label="Recent bowling performances"></ul>
+    </div>
+  </div>
+
+  <h3>Man of the Match Awards</h3>
+  <ul class="top-list" id="pomHistory" aria-label="Man of the match awards"></ul>
+
+  <h3>Batting Stats by Ground</h3>
+  <div class="table-wrapper">
+    <table class="data-table" id="groundStats" aria-label="Batting statistics by ground">
+      <thead>
+        <tr><th>Ground</th><th>Innings</th><th>Runs</th><th>Balls</th><th>SR</th><th>Avg</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <h3>Bowling Stats by Ground</h3>
+  <div class="table-wrapper">
+    <table class="data-table" id="bowlGroundStats" aria-label="Bowling statistics by ground">
+      <thead>
+        <tr><th>Ground</th><th>Innings</th><th>Overs</th><th>Dot%</th><th>Wkts</th><th>Economy</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</main>
+
+<script src="assets/dashboard.js"></script>
+</body>
+</html>
