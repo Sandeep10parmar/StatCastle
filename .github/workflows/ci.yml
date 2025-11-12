@@ -58,16 +58,42 @@ jobs:
       - name: Fetch match data
         run: |
           echo "Starting data export..."
-          python cricclubs_export.py
+          echo "Environment:"
+          echo "  HEADLESS=${{ env.HEADLESS || '1' }}"
+          echo "  MAX_LEAGUE_WORKERS=${{ env.MAX_LEAGUE_WORKERS || '3' }}"
+          echo "  MAX_MATCH_WORKERS=${{ env.MAX_MATCH_WORKERS || '4' }}"
+          echo "  MATCH_DELAY=${{ env.MATCH_DELAY || '0.3' }}"
+          echo ""
+          echo "Running export (this may take several minutes)..."
+          timeout 1800 python cricclubs_export.py || {
+            echo "⚠️  Export timed out or failed, but continuing to check for partial data..."
+            exit_code=$?
+            echo "Exit code: $exit_code"
+          }
+          echo ""
           echo "Export completed. Checking for data..."
           if ls cricclubs_export_out/*/matches.json 1> /dev/null 2>&1; then
             echo "✓ Match data found:"
             ls -lh cricclubs_export_out/*/matches.json
-            echo "Total matches: $(find cricclubs_export_out -name matches.json -exec cat {} \; | grep -c '"match_id"' || echo '0')"
+            match_count=$(find cricclubs_export_out -name matches.json -exec cat {} \; | python3 -c "import sys, json; data=[]; [data.extend(json.loads(line) if line.strip().startswith('[') else json.loads('['+line+']')) for line in sys.stdin if line.strip()]; print(sum(len(m) if isinstance(m, list) else 1 for m in data))" 2>/dev/null || find cricclubs_export_out -name matches.json -exec sh -c 'cat "$1" | grep -c "match_id"' _ {} \; | awk '{s+=$1} END {print s+0}')
+            echo "Total matches found: $match_count"
+            if [ "$match_count" = "0" ] || [ -z "$match_count" ]; then
+              echo "⚠️  WARNING: matches.json files exist but contain no match data"
+              echo "Checking file contents:"
+              find cricclubs_export_out -name matches.json -exec sh -c 'echo "  $1: $(wc -c < "$1") bytes"' _ {} \;
+            fi
           else
             echo "✗ No match data found!"
+            echo "Checking if export directory was created:"
+            ls -la cricclubs_export_out/ 2>/dev/null || echo "  Export directory doesn't exist"
             exit 1
           fi
+        env:
+          HEADLESS: 1
+          MAX_LEAGUE_WORKERS: 2
+          MAX_MATCH_WORKERS: 2
+          MATCH_DELAY: 0.5
+          FORCE_REFRESH: 0
       - name: Build dashboard & PDF
         run: |
           echo "Starting analysis..."
