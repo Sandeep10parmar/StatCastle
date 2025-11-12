@@ -80,16 +80,37 @@ jobs:
             echo "✗ No JSON files generated!"
             exit 1
           fi
-      - name: Create placeholder JSON files if missing
+      - name: Verify generated files before upload
         run: |
-          mkdir -p team_dashboard/assets
-          # Create empty JSON files if they don't exist (for demo/CI purposes)
-          [ -f team_dashboard/assets/team_analytics.json ] || echo '{}' > team_dashboard/assets/team_analytics.json
-          [ -f team_dashboard/assets/player_stats.json ] || echo '{}' > team_dashboard/assets/player_stats.json
-          [ -f team_dashboard/assets/player_photos.json ] || echo '{}' > team_dashboard/assets/player_photos.json
-          [ -f team_dashboard/assets/match_results.json ] || echo '[]' > team_dashboard/assets/match_results.json
-          [ -f team_dashboard/assets/series_list.json ] || echo '[]' > team_dashboard/assets/series_list.json
-          echo "Created placeholder JSON files for dashboard"
+          echo "=== Checking generated files ==="
+          echo "Files in team_dashboard/assets/:"
+          ls -lh team_dashboard/assets/*.json 2>/dev/null || echo "No JSON files found"
+          echo ""
+          echo "File sizes:"
+          for file in team_dashboard/assets/*.json; do
+            if [ -f "$file" ]; then
+              size=$(wc -c < "$file")
+              echo "  $(basename $file): $size bytes"
+              if [ "$size" -lt 10 ]; then
+                echo "    ⚠️  WARNING: File is very small (likely empty)"
+              else
+                echo "    ✓ File has content"
+              fi
+            fi
+          done
+          echo ""
+          echo "Sample of match_results.json (first 500 chars):"
+          head -c 500 team_dashboard/assets/match_results.json 2>/dev/null || echo "File not found"
+          echo ""
+          echo ""
+          echo "Checking if match_results.json has actual data:"
+          if [ -f team_dashboard/assets/match_results.json ]; then
+            match_count=$(python3 -c "import json; f=open('team_dashboard/assets/match_results.json'); data=json.load(f); print(len(data))" 2>/dev/null || echo "0")
+            echo "  Match count in JSON: $match_count"
+            if [ "$match_count" = "0" ]; then
+              echo "  ⚠️  WARNING: match_results.json is empty array"
+            fi
+          fi
       - name: Upload dashboard artifact (for Pages)
         uses: actions/upload-pages-artifact@v3
         with:
