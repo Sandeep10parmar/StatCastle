@@ -38,8 +38,8 @@ jobs:
           python -c "import yaml; print('PyYAML OK:', yaml.__version__)"
       - name: Install Playwright browser
         run: |
-          playwright install chromium
-          playwright install-deps chromium
+          python -m playwright install chromium
+          python -m playwright install-deps chromium
       - name: Fetch match data
         run: |
           python cricclubs_export.py
