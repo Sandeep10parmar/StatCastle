@@ -37,3 +37,6 @@ __pycache__/
 
 # Docker
 .docker/
+
+# Playwright browser cache
+.pw-user/
