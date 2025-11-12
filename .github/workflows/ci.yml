@@ -51,8 +51,18 @@ jobs:
         continue-on-error: true  # Continue even if export fails (may not have config.yaml in CI)
       - name: Build dashboard & PDF
         run: |
-          python analyze.py
+          python analyze.py || echo "Analysis failed (likely no config.yaml), creating placeholder files"
         continue-on-error: true  # Continue even if analysis fails (may not have data)
+      - name: Create placeholder JSON files if missing
+        run: |
+          mkdir -p team_dashboard/assets
+          # Create empty JSON files if they don't exist (for demo/CI purposes)
+          [ -f team_dashboard/assets/team_analytics.json ] || echo '{}' > team_dashboard/assets/team_analytics.json
+          [ -f team_dashboard/assets/player_stats.json ] || echo '{}' > team_dashboard/assets/player_stats.json
+          [ -f team_dashboard/assets/player_photos.json ] || echo '{}' > team_dashboard/assets/player_photos.json
+          [ -f team_dashboard/assets/match_results.json ] || echo '[]' > team_dashboard/assets/match_results.json
+          [ -f team_dashboard/assets/series_list.json ] || echo '[]' > team_dashboard/assets/series_list.json
+          echo "Created placeholder JSON files for dashboard"
       - name: Upload dashboard artifact (for Pages)
         uses: actions/upload-pages-artifact@v3
         with:
