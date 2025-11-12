@@ -38,7 +38,7 @@ jobs:
           # Ensure playwright is installed (may be missing from lock file)
           pip install playwright>=1.40
           python -c "import yaml; print('PyYAML OK:', yaml.__version__)"
-          python -c "import playwright; print('Playwright OK:', playwright.__version__)"
+          python -c "import playwright; print('Playwright OK: installed')"
       - name: Install Playwright browser
         run: |
           python -m playwright install chromium
