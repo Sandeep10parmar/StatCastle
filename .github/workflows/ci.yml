@@ -47,12 +47,16 @@ jobs:
           PLAYWRIGHT_BROWSERS_PATH: 0  # Install to default location
       - name: Fetch match data
         run: |
+          echo "Starting data export..."
           python cricclubs_export.py
-        continue-on-error: true  # Continue even if export fails (may not have config.yaml in CI)
+          echo "Export completed. Checking for data..."
+          ls -la cricclubs_export_out/*/matches.json 2>/dev/null || echo "No match data found"
       - name: Build dashboard & PDF
         run: |
-          python analyze.py || echo "Analysis failed (likely no config.yaml), creating placeholder files"
-        continue-on-error: true  # Continue even if analysis fails (may not have data)
+          echo "Starting analysis..."
+          python analyze.py
+          echo "Analysis completed. Checking for generated files..."
+          ls -la team_dashboard/assets/*.json 2>/dev/null || echo "No JSON files generated"
       - name: Create placeholder JSON files if missing
         run: |
           mkdir -p team_dashboard/assets
