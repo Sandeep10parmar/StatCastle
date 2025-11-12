@@ -237,6 +237,91 @@ leagues:
 
 ---
 
+## ⚡️ Data Export Features
+
+The `cricclubs_export.py` script includes several performance and efficiency features:
+
+### Incremental Updates (Default)
+
+**By default, StatCastle only fetches new matches** - it's smart about not re-downloading data you already have:
+
+- ✅ **First run**: Discovers and fetches all matches for your team
+- ✅ **Subsequent runs**: Only fetches new matches that weren't in previous runs
+- ✅ **Automatic detection**: Compares discovered match IDs with existing `matches.json` files
+- ✅ **Efficient**: Saves time and bandwidth by skipping already-fetched matches
+
+**Example:**
+```bash
+# First run - fetches all 50 matches
+python3 cricclubs_export.py
+# Output: "saved 50 matches (50 new, 0 existing)"
+
+# Second run (after 5 new matches played) - only fetches 5 new matches
+python3 cricclubs_export.py
+# Output: "saved 55 matches (5 new, 50 existing)"
+```
+
+### Force Refresh
+
+To re-fetch all matches (useful if data was corrupted or you want fresh data):
+
+```bash
+# Docker
+FORCE_REFRESH=1 docker-compose up
+
+# Local
+FORCE_REFRESH=1 python3 cricclubs_export.py
+```
+
+**When to use:**
+- Data corruption or incomplete fetches
+- Want to refresh all match data
+- Testing or debugging
+
+### Multi-Threading for Performance
+
+StatCastle uses parallel processing to speed up data fetching:
+
+**Two-Level Parallelism:**
+1. **League-level**: Multiple leagues processed simultaneously
+2. **Match-level**: Multiple matches per league fetched in parallel
+
+**Performance Tuning:**
+
+```bash
+# Increase parallel workers for faster fetching (if you have good internet)
+MAX_LEAGUE_WORKERS=5 MAX_MATCH_WORKERS=8 python3 cricclubs_export.py
+
+# Reduce workers if you're getting rate-limited
+MAX_LEAGUE_WORKERS=1 MAX_MATCH_WORKERS=2 python3 cricclubs_export.py
+```
+
+**Environment Variables:**
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MAX_LEAGUE_WORKERS` | `3` | Number of leagues to process in parallel |
+| `MAX_MATCH_WORKERS` | `4` | Number of matches per league to fetch in parallel |
+| `MATCH_DELAY` | `0.3` | Delay between match requests (seconds) - prevents rate limiting |
+| `FORCE_REFRESH` | `0` | Set to `1` to re-fetch all matches (ignores incremental mode) |
+
+**Performance Tips:**
+- **Fast internet + stable connection**: Increase `MAX_MATCH_WORKERS` to 6-8
+- **Slow/unstable connection**: Reduce to 2-3 workers, increase `MATCH_DELAY` to 0.5-1.0
+- **Rate limiting issues**: Increase `MATCH_DELAY` to 0.5-1.0 seconds
+- **Multiple leagues**: `MAX_LEAGUE_WORKERS=3` is usually optimal
+
+**Example with custom settings:**
+```bash
+# Aggressive fetching (fast connection, many matches)
+MAX_LEAGUE_WORKERS=5 MAX_MATCH_WORKERS=8 MATCH_DELAY=0.2 python3 cricclubs_export.py
+
+# Conservative fetching (slow connection, avoid rate limits)
+MAX_LEAGUE_WORKERS=2 MAX_MATCH_WORKERS=2 MATCH_DELAY=0.8 python3 cricclubs_export.py
+```
+
+---
+
 ## 📊 Output Structure
 
 ```
