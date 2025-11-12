@@ -510,7 +510,9 @@ Contributions welcome! Please:
 
 ## 📄 License
 
-[Add your license here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+**In short:** You're free to use, modify, and distribute this software. Just include the original license and copyright notice.
 
 ---
 
