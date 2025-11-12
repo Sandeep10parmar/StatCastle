@@ -45,6 +45,101 @@ jobs:
           python -m playwright install-deps chromium
         env:
           PLAYWRIGHT_BROWSERS_PATH: 0  # Install to default location
+      - name: Create config.yaml from secrets
+        run: |
+          cat > config.yaml << 'EOF'
+          team_name: "${{ secrets.TEAM_NAME }}"
+          leagues:
+          EOF
+          # Add leagues from secrets (supporting up to 10 leagues)
+          # Format: LEAGUE_N_BASE_PATH, LEAGUE_N_CLUB_ID, LEAGUE_N_LEAGUE_ID, LEAGUE_N_TEAM_ID
+          for i in {1..10}; do
+            base_path_secret="LEAGUE_${i}_BASE_PATH"
+            base_path="${{ secrets[format('LEAGUE_{0}_BASE_PATH', ${{ i }})] }}"
+            # Use GitHub Actions expression syntax
+            if [ "$i" = "1" ] && [ -n "${{ secrets.LEAGUE_1_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_1_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_1_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_1_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_1_TEAM_ID }}
+          EOF
+            elif [ "$i" = "2" ] && [ -n "${{ secrets.LEAGUE_2_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_2_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_2_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_2_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_2_TEAM_ID }}
+          EOF
+            elif [ "$i" = "3" ] && [ -n "${{ secrets.LEAGUE_3_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_3_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_3_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_3_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_3_TEAM_ID }}
+          EOF
+            elif [ "$i" = "4" ] && [ -n "${{ secrets.LEAGUE_4_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_4_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_4_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_4_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_4_TEAM_ID }}
+          EOF
+            elif [ "$i" = "5" ] && [ -n "${{ secrets.LEAGUE_5_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_5_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_5_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_5_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_5_TEAM_ID }}
+          EOF
+            elif [ "$i" = "6" ] && [ -n "${{ secrets.LEAGUE_6_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_6_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_6_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_6_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_6_TEAM_ID }}
+          EOF
+            elif [ "$i" = "7" ] && [ -n "${{ secrets.LEAGUE_7_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_7_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_7_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_7_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_7_TEAM_ID }}
+          EOF
+            elif [ "$i" = "8" ] && [ -n "${{ secrets.LEAGUE_8_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_8_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_8_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_8_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_8_TEAM_ID }}
+          EOF
+            elif [ "$i" = "9" ] && [ -n "${{ secrets.LEAGUE_9_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_9_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_9_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_9_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_9_TEAM_ID }}
+          EOF
+            elif [ "$i" = "10" ] && [ -n "${{ secrets.LEAGUE_10_BASE_PATH }}" ]; then
+              cat >> config.yaml << EOF
+            - base_path: "${{ secrets.LEAGUE_10_BASE_PATH }}"
+              club_id: ${{ secrets.LEAGUE_10_CLUB_ID }}
+              league_id: ${{ secrets.LEAGUE_10_LEAGUE_ID }}
+              team_id: ${{ secrets.LEAGUE_10_TEAM_ID }}
+          EOF
+            fi
+          done
+          echo "Created config.yaml from secrets"
+          # Don't print the full config for security, just verify it exists
+          if [ -f config.yaml ]; then
+            echo "✓ config.yaml created successfully"
+            league_count=$(grep -c "base_path:" config.yaml || echo "0")
+            echo "✓ Configured $league_count league(s)"
+            # Show structure without sensitive data
+            grep -E "team_name" config.yaml || true
+          else
+            echo "⚠ config.yaml not created - GitHub Pages will show empty data"
+          fi
       - name: Fetch match data
         run: |
           python cricclubs_export.py
