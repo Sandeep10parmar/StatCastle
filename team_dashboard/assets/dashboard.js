@@ -1929,9 +1929,25 @@ function renderPlayerPerformanceCharts(playerName) {
     const noDataMsg = canvas.parentElement.querySelector('.no-data-message');
     if (noDataMsg) noDataMsg.remove();
     
-    // Destroy existing chart instance
+    // Destroy existing chart instance and clear canvas context
     if (chartInstanceVar) {
-      chartInstanceVar.destroy();
+      try {
+        chartInstanceVar.destroy();
+      } catch (e) {
+        // Chart may already be destroyed, ignore error
+        devWarn('Error destroying chart:', e);
+      }
+    }
+    
+    // Explicitly clear canvas context to prevent stale data on mobile browsers
+    // This is critical for mobile where canvas caching is more aggressive
+    const ctx = canvas.getContext('2d');
+    if (ctx) {
+      // Use canvas internal dimensions if set (by previous Chart.js instance),
+      // otherwise use client dimensions as fallback
+      const width = canvas.width || canvas.clientWidth || 800;
+      const height = canvas.height || canvas.clientHeight || 400;
+      ctx.clearRect(0, 0, width, height);
     }
     
     if (hasData) {
@@ -1952,6 +1968,17 @@ function renderPlayerPerformanceCharts(playerName) {
   // Batting Trend Chart
   let battingCanvas = ensureCanvas('battingTrendChart', 'Batting performance trend over time', '.performance-charts-grid > .chart-container:first-child');
   if (battingCanvas) {
+    // Destroy and null out existing chart instance before rendering new one
+    // This prevents stale data from persisting, especially on mobile browsers
+    if (battingTrendChartInstance) {
+      try {
+        battingTrendChartInstance.destroy();
+      } catch (e) {
+        devWarn('Error destroying batting chart:', e);
+      }
+      battingTrendChartInstance = null;
+    }
+    
     const recentBatting = ps.recent_batting || [];
     const battingLabels = recentBatting.map(r => formatHumanDate(r.date)).reverse();
     const battingRuns = recentBatting.map(r => r.runs || 0).reverse();
@@ -1959,9 +1986,17 @@ function renderPlayerPerformanceCharts(playerName) {
     renderChartOrMessage(
       battingCanvas,
       recentBatting.length > 0,
-      battingTrendChartInstance,
+      null, // Chart instance already destroyed above
       () => {
+        // Clear canvas context again before creating new chart (defense in depth for mobile)
         const battingCtx = battingCanvas.getContext('2d');
+        if (battingCtx) {
+          // Use canvas internal dimensions if set, otherwise use client dimensions as fallback
+          const width = battingCanvas.width || battingCanvas.clientWidth || 800;
+          const height = battingCanvas.height || battingCanvas.clientHeight || 400;
+          battingCtx.clearRect(0, 0, width, height);
+        }
+        
         battingTrendChartInstance = new Chart(battingCtx, {
           type: 'line',
           data: {
@@ -2022,6 +2057,17 @@ function renderPlayerPerformanceCharts(playerName) {
   // Bowling Trend Chart
   let bowlingCanvas = ensureCanvas('bowlingTrendChart', 'Bowling performance trend over time', '.performance-charts-grid > .chart-container:last-child');
   if (bowlingCanvas) {
+    // Destroy and null out existing chart instance before rendering new one
+    // This prevents stale data from persisting, especially on mobile browsers
+    if (bowlingTrendChartInstance) {
+      try {
+        bowlingTrendChartInstance.destroy();
+      } catch (e) {
+        devWarn('Error destroying bowling chart:', e);
+      }
+      bowlingTrendChartInstance = null;
+    }
+    
     const recentBowling = ps.recent_bowling || [];
     const bowlingLabels = recentBowling.map(r => formatHumanDate(r.date)).reverse();
     const bowlingWickets = recentBowling.map(r => r.wickets || 0).reverse();
@@ -2029,9 +2075,17 @@ function renderPlayerPerformanceCharts(playerName) {
     renderChartOrMessage(
       bowlingCanvas,
       recentBowling.length > 0,
-      bowlingTrendChartInstance,
+      null, // Chart instance already destroyed above
       () => {
+        // Clear canvas context again before creating new chart (defense in depth for mobile)
         const bowlingCtx = bowlingCanvas.getContext('2d');
+        if (bowlingCtx) {
+          // Use canvas internal dimensions if set, otherwise use client dimensions as fallback
+          const width = bowlingCanvas.width || bowlingCanvas.clientWidth || 800;
+          const height = bowlingCanvas.height || bowlingCanvas.clientHeight || 400;
+          bowlingCtx.clearRect(0, 0, width, height);
+        }
+        
         bowlingTrendChartInstance = new Chart(bowlingCtx, {
           type: 'line',
           data: {
