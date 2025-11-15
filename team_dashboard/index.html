@@ -20,8 +20,69 @@
   </div>
 </nav>
 
-<!-- Common Filters -->
-<section class="filters" aria-label="Filter dashboard data">
+<!-- Mobile Filter Icon Button (visible on mobile only) -->
+<button id="filterIconBtn" class="filter-icon-btn mobile-only" aria-label="Open filters" aria-expanded="false">
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <path d="M3 6h18M7 12h10M11 18h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <span class="filter-badge" id="filterBadge" aria-hidden="true"></span>
+</button>
+
+<!-- Active Filters Display (always visible, outside modal) -->
+<div class="active-filters-container" id="activeFilters" aria-live="polite"></div>
+
+<!-- Bottom Sheet Modal for Filters (mobile only) -->
+<div id="filterModal" class="filter-modal" role="dialog" aria-labelledby="filterModalTitle" aria-hidden="true">
+  <div class="filter-modal-backdrop" aria-label="Close filters"></div>
+  <div class="filter-modal-content">
+    <div class="filter-modal-header">
+      <h2 id="filterModalTitle">Filters</h2>
+      <button id="closeFilterModal" class="filter-modal-close" aria-label="Close filters">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+    <div class="filter-modal-body">
+      <!-- Common Filters -->
+      <section class="filters" aria-label="Filter dashboard data">
+        <div class="filter-controls-row">
+          <label for="autoApplyToggleMobile" class="toggle-label">
+            <input type="checkbox" id="autoApplyToggleMobile" aria-label="Auto-apply filters">
+            <span>Auto-apply filters</span>
+          </label>
+          <div class="filter-presets">
+            <button type="button" class="preset-btn" data-preset="last5">Last 5 matches</button>
+            <button type="button" class="preset-btn" data-preset="season">This season</button>
+            <button type="button" class="preset-btn" data-preset="last3months">Last 3 months</button>
+            <button type="button" class="preset-btn" data-preset="alltime">All time</button>
+          </div>
+        </div>
+        <div class="filter-inputs-row">
+          <label for="startDateMobile">
+            Start Date
+            <input type="date" id="startDateMobile" aria-label="Start date filter">
+          </label>
+          <label for="endDateMobile">
+            End Date
+            <input type="date" id="endDateMobile" aria-label="End date filter">
+          </label>
+          <label for="seriesSelectMobile">
+            Series
+            <select id="seriesSelectMobile" multiple aria-label="Series filter" aria-multiselectable="true"></select>
+          </label>
+          <div class="filter-buttons">
+            <button id="clearFiltersBtnMobile" type="button">Clear Filters</button>
+            <button id="applyFiltersBtnMobile" type="button">Apply Filters</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<!-- Desktop Filters Section (visible on desktop only) -->
+<section class="filters desktop-only" aria-label="Filter dashboard data">
   <div class="filter-controls-row">
     <label for="autoApplyToggle" class="toggle-label">
       <input type="checkbox" id="autoApplyToggle" aria-label="Auto-apply filters">
@@ -34,7 +95,7 @@
       <button type="button" class="preset-btn" data-preset="alltime">All time</button>
     </div>
   </div>
-  <div class="active-filters" id="activeFilters" aria-live="polite"></div>
+  <div class="active-filters-desktop" id="activeFiltersDesktop" aria-live="polite"></div>
   <div class="filter-inputs-row">
     <label for="startDate">
       Start Date

@@ -31,6 +31,12 @@ body {
   animation: fadeIn 0.3s ease-in;
 }
 
+body.modal-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -277,6 +283,222 @@ h4 {
   font-weight: 700;
   color: var(--text-primary);
   margin: 12px 0 6px;
+}
+
+/* Mobile/Desktop Visibility */
+.mobile-only {
+  display: none !important;
+}
+
+.desktop-only {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .mobile-only {
+    display: block !important;
+  }
+  .desktop-only {
+    display: none !important;
+  }
+}
+
+/* Active Filters Container (outside modal) */
+.active-filters-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.active-filters-desktop {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  min-height: 32px;
+}
+
+/* Filter Icon Button (Mobile) */
+.filter-icon-btn {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--primary-gradient);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px var(--shadow-xl);
+  z-index: 1000;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 0;
+}
+
+.filter-icon-btn:hover {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 6px 20px var(--shadow-xl);
+}
+
+.filter-icon-btn:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.filter-icon-btn:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.filter-icon-btn[aria-expanded="true"] {
+  background: var(--primary-hover);
+}
+
+.filter-icon-btn svg {
+  width: 24px;
+  height: 24px;
+}
+
+.filter-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: var(--error);
+  color: white;
+  border-radius: 10px;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 6px;
+  border: 2px solid white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.filter-badge:empty {
+  display: none;
+}
+
+/* Bottom Sheet Modal */
+.filter-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2000;
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.filter-modal[aria-hidden="false"] {
+  pointer-events: auto;
+  opacity: 1;
+  visibility: visible;
+}
+
+.filter-modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(2, 6, 23, 0.5);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.filter-modal-content {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border-radius: 20px 20px 0 0;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -4px 24px rgba(2, 6, 23, 0.2);
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  visibility: hidden;
+}
+
+.filter-modal[aria-hidden="false"] .filter-modal-content {
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.filter-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px;
+  border-bottom: 2px solid var(--border);
+  flex-shrink: 0;
+}
+
+.filter-modal-header h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.filter-modal-close {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.filter-modal-close:hover {
+  background: var(--bg-hover);
+  transform: rotate(90deg);
+}
+
+.filter-modal-close:focus {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.filter-modal-close svg {
+  width: 24px;
+  height: 24px;
+}
+
+.filter-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.filter-modal-body .filters {
+  margin: 0;
+  padding: 0;
+  border: none;
+  box-shadow: none;
+  background: transparent;
 }
 
 /* Filters */
@@ -704,6 +926,25 @@ button:focus {
     padding: 16px;
   }
   
+  .filter-icon-btn {
+    bottom: 16px;
+    right: 16px;
+    width: 56px;
+    height: 56px;
+  }
+  
+  .filter-modal-header {
+    padding: 16px 20px;
+  }
+  
+  .filter-modal-header h2 {
+    font-size: 18px;
+  }
+  
+  .filter-modal-body {
+    padding: 20px;
+  }
+  
   .filter-controls-row {
     flex-direction: column;
     align-items: stretch;
@@ -751,7 +992,8 @@ button:focus {
     gap: 12px;
   }
   
-  #applyFiltersBtn, #clearFiltersBtn {
+  #applyFiltersBtn, #clearFiltersBtn,
+  #applyFiltersBtnMobile, #clearFiltersBtnMobile {
     width: 100%;
     padding: 14px;
     font-size: 16px;

@@ -28,6 +28,11 @@ let loadingOverlay = null;
 let retryCount = 0;
 const MAX_RETRIES = 3;
 
+// Mobile detection helper
+function isMobile() {
+  return window.innerWidth <= 768;
+}
+
 // Debounce function for filter application
 function debounce(func, wait) {
   let timeout;
@@ -39,6 +44,102 @@ function debounce(func, wait) {
     clearTimeout(timeout);
     timeout = setTimeout(later, wait);
   };
+}
+
+// Sync mobile and desktop filter inputs
+function syncMobileDesktopFilters(direction = 'both') {
+  // Sync desktop -> mobile
+  if (direction === 'desktop-to-mobile' || direction === 'both') {
+    const desktopStartDate = document.getElementById('startDate');
+    const desktopEndDate = document.getElementById('endDate');
+    const desktopSeries = document.getElementById('seriesSelect');
+    const desktopAutoApply = document.getElementById('autoApplyToggle');
+    
+    const mobileStartDate = document.getElementById('startDateMobile');
+    const mobileEndDate = document.getElementById('endDateMobile');
+    const mobileSeries = document.getElementById('seriesSelectMobile');
+    const mobileAutoApply = document.getElementById('autoApplyToggleMobile');
+    
+    if (desktopStartDate && mobileStartDate) mobileStartDate.value = desktopStartDate.value;
+    if (desktopEndDate && mobileEndDate) mobileEndDate.value = desktopEndDate.value;
+    if (desktopSeries && mobileSeries) {
+      Array.from(mobileSeries.options).forEach(opt => {
+        opt.selected = Array.from(desktopSeries.options).some(dOpt => 
+          dOpt.value === opt.value && dOpt.selected
+        );
+      });
+    }
+    if (desktopAutoApply && mobileAutoApply) {
+      mobileAutoApply.checked = desktopAutoApply.checked;
+    }
+  }
+  
+  // Sync mobile -> desktop
+  if (direction === 'mobile-to-desktop' || direction === 'both') {
+    const mobileStartDate = document.getElementById('startDateMobile');
+    const mobileEndDate = document.getElementById('endDateMobile');
+    const mobileSeries = document.getElementById('seriesSelectMobile');
+    const mobileAutoApply = document.getElementById('autoApplyToggleMobile');
+    
+    const desktopStartDate = document.getElementById('startDate');
+    const desktopEndDate = document.getElementById('endDate');
+    const desktopSeries = document.getElementById('seriesSelect');
+    const desktopAutoApply = document.getElementById('autoApplyToggle');
+    
+    if (mobileStartDate && desktopStartDate) desktopStartDate.value = mobileStartDate.value;
+    if (mobileEndDate && desktopEndDate) desktopEndDate.value = mobileEndDate.value;
+    if (mobileSeries && desktopSeries) {
+      Array.from(desktopSeries.options).forEach(opt => {
+        opt.selected = Array.from(mobileSeries.options).some(mOpt => 
+          mOpt.value === opt.value && mOpt.selected
+        );
+      });
+    }
+    if (mobileAutoApply && desktopAutoApply) {
+      desktopAutoApply.checked = mobileAutoApply.checked;
+    }
+  }
+}
+
+// Open filter modal
+function openFilterModal() {
+  const modal = document.getElementById('filterModal');
+  const iconBtn = document.getElementById('filterIconBtn');
+  
+  if (!modal || !iconBtn) return;
+  
+  // Sync desktop to mobile before opening
+  syncMobileDesktopFilters('desktop-to-mobile');
+  
+  modal.setAttribute('aria-hidden', 'false');
+  iconBtn.setAttribute('aria-expanded', 'true');
+  document.body.classList.add('modal-open');
+  
+  // Focus on close button for accessibility
+  const closeBtn = document.getElementById('closeFilterModal');
+  if (closeBtn) {
+    setTimeout(() => closeBtn.focus(), 100);
+  }
+}
+
+// Close filter modal
+function closeFilterModal() {
+  const modal = document.getElementById('filterModal');
+  const iconBtn = document.getElementById('filterIconBtn');
+  
+  if (!modal || !iconBtn) return;
+  
+  // Sync mobile to desktop before closing
+  syncMobileDesktopFilters('mobile-to-desktop');
+  
+  modal.setAttribute('aria-hidden', 'true');
+  iconBtn.setAttribute('aria-expanded', 'false');
+  document.body.classList.remove('modal-open');
+  
+  // Return focus to filter icon button
+  if (iconBtn) {
+    iconBtn.focus();
+  }
 }
 
 // Show loading overlay
@@ -365,6 +466,112 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  // Mobile filter modal handlers
+  const modal = document.getElementById('filterModal');
+  
+  // Mobile filter icon button
+  const filterIconBtn = document.getElementById('filterIconBtn');
+  if (filterIconBtn && modal) {
+    filterIconBtn.addEventListener('click', function() {
+      if (modal.getAttribute('aria-hidden') === 'true') {
+        openFilterModal();
+      } else {
+        closeFilterModal();
+      }
+    });
+  }
+  const closeModalBtn = document.getElementById('closeFilterModal');
+  const backdrop = modal ? modal.querySelector('.filter-modal-backdrop') : null;
+
+  if (modal) {
+    // Close on backdrop click
+    if (backdrop) {
+      backdrop.addEventListener('click', closeFilterModal);
+    }
+
+    // Close on escape key
+    document.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape' && modal.getAttribute('aria-hidden') === 'false') {
+        closeFilterModal();
+      }
+    });
+  }
+
+  if (closeModalBtn) {
+    closeModalBtn.addEventListener('click', closeFilterModal);
+  }
+
+  // Mobile filter buttons
+  const applyBtnMobile = document.getElementById('applyFiltersBtnMobile');
+  if (applyBtnMobile) {
+    applyBtnMobile.addEventListener('click', function() {
+      syncMobileDesktopFilters('mobile-to-desktop');
+      applyFilters();
+      closeFilterModal();
+    });
+  }
+
+  const clearBtnMobile = document.getElementById('clearFiltersBtnMobile');
+  if (clearBtnMobile) {
+    clearBtnMobile.addEventListener('click', function() {
+      clearFilters();
+      syncMobileDesktopFilters('desktop-to-mobile');
+    });
+  }
+
+  // Mobile auto-apply toggle
+  const autoApplyToggleMobile = document.getElementById('autoApplyToggleMobile');
+  if (autoApplyToggleMobile) {
+    const desktopAutoApply = document.getElementById('autoApplyToggle');
+    if (desktopAutoApply) {
+      autoApplyToggleMobile.checked = desktopAutoApply.checked;
+    }
+    
+    autoApplyToggleMobile.addEventListener('change', function() {
+      syncMobileDesktopFilters('mobile-to-desktop');
+      const desktopAutoApply = document.getElementById('autoApplyToggle');
+      if (desktopAutoApply) {
+        desktopAutoApply.checked = this.checked;
+        localStorage.setItem('autoApplyFilters', this.checked ? 'true' : 'false');
+      }
+    });
+  }
+
+  // Mobile filter inputs - sync on change
+  const startDateMobile = document.getElementById('startDateMobile');
+  const endDateMobile = document.getElementById('endDateMobile');
+  const seriesSelectMobile = document.getElementById('seriesSelectMobile');
+
+  if (startDateMobile) {
+    startDateMobile.addEventListener('change', function() {
+      syncMobileDesktopFilters('mobile-to-desktop');
+      updateActiveFilters();
+      if (isAutoApplyEnabled()) {
+        applyFilters();
+      }
+    });
+  }
+
+  if (endDateMobile) {
+    endDateMobile.addEventListener('change', function() {
+      syncMobileDesktopFilters('mobile-to-desktop');
+      updateActiveFilters();
+      if (isAutoApplyEnabled()) {
+        applyFilters();
+      }
+    });
+  }
+
+  if (seriesSelectMobile) {
+    seriesSelectMobile.addEventListener('change', function() {
+      syncMobileDesktopFilters('mobile-to-desktop');
+      updateActiveFilters();
+      if (isAutoApplyEnabled()) {
+        applyFilters();
+      }
+    });
+  }
+
   // Set up auto-apply listeners if enabled
   setupAutoApplyListeners();
 
@@ -526,31 +733,27 @@ async function loadData() {
     // Load team logo dynamically
     loadTeamLogo(teamAnalytics, teamName);
     
-    // Populate series dropdown
+    // Populate series dropdown (desktop and mobile)
     const seriesSelect = document.getElementById('seriesSelect');
-    if (seriesSelect) {
-      seriesSelect.innerHTML = ''; // Clear first
-      if (seriesList && seriesList.length > 0) {
-        seriesList.forEach(s => {
-          const opt = document.createElement('option');
-          opt.value = s;
-          opt.textContent = s;
-          opt.selected = true;
-          seriesSelect.appendChild(opt);
-        });
-      } else {
-        // If no series list, try to extract from match results
-        const seriesFromResults = [...new Set((matchResults || []).map(m => m.series).filter(s => s))];
-        if (seriesFromResults.length > 0) {
-          seriesFromResults.forEach(s => {
+    const seriesSelectMobile = document.getElementById('seriesSelectMobile');
+    const seriesSelects = [seriesSelect, seriesSelectMobile].filter(s => s !== null);
+    
+    if (seriesSelects.length > 0) {
+      const seriesToAdd = seriesList && seriesList.length > 0 ? seriesList : 
+        [...new Set((matchResults || []).map(m => m.series).filter(s => s))];
+      
+      seriesSelects.forEach(select => {
+        select.innerHTML = ''; // Clear first
+        if (seriesToAdd.length > 0) {
+          seriesToAdd.forEach(s => {
             const opt = document.createElement('option');
             opt.value = s;
             opt.textContent = s;
             opt.selected = true;
-            seriesSelect.appendChild(opt);
+            select.appendChild(opt);
           });
         }
-      }
+      });
     }
     
     hideLoading();
@@ -570,6 +773,7 @@ const debouncedApplyFilters = debounce(applyFilters, 300);
 
 // Check if auto-apply is enabled
 function isAutoApplyEnabled() {
+  // Check desktop toggle (always in sync with mobile)
   const toggle = document.getElementById('autoApplyToggle');
   return toggle && toggle.checked;
 }
@@ -726,6 +930,9 @@ function applyFilterPreset(preset) {
     });
   }
   
+  // Sync to mobile
+  syncMobileDesktopFilters('desktop-to-mobile');
+  
   updateActiveFilters();
   
   if (isAutoApplyEnabled()) {
@@ -738,12 +945,23 @@ function clearFilters() {
   const startDateInput = document.getElementById('startDate');
   const endDateInput = document.getElementById('endDate');
   const seriesSelect = document.getElementById('seriesSelect');
+  const startDateMobile = document.getElementById('startDateMobile');
+  const endDateMobile = document.getElementById('endDateMobile');
+  const seriesSelectMobile = document.getElementById('seriesSelectMobile');
   
   if (startDateInput) startDateInput.value = '';
   if (endDateInput) endDateInput.value = '';
+  if (startDateMobile) startDateMobile.value = '';
+  if (endDateMobile) endDateMobile.value = '';
   
   if (seriesSelect && seriesSelect.options.length > 0) {
     Array.from(seriesSelect.options).forEach(opt => {
+      opt.selected = true;
+    });
+  }
+  
+  if (seriesSelectMobile && seriesSelectMobile.options.length > 0) {
+    Array.from(seriesSelectMobile.options).forEach(opt => {
       opt.selected = true;
     });
   }
@@ -754,8 +972,12 @@ function clearFilters() {
 
 // Update active filter indicators
 function updateActiveFilters() {
+  // Sync inputs first to ensure both mobile and desktop have same values
+  syncMobileDesktopFilters('both');
+  
   const activeFiltersContainer = document.getElementById('activeFilters');
-  if (!activeFiltersContainer) return;
+  const activeFiltersDesktop = document.getElementById('activeFiltersDesktop');
+  const filterBadge = document.getElementById('filterBadge');
   
   const startDateInput = document.getElementById('startDate');
   const endDateInput = document.getElementById('endDate');
@@ -769,6 +991,8 @@ function updateActiveFilters() {
       label: `From: ${formatHumanDate(startDateInput.value)}`,
       remove: () => {
         startDateInput.value = '';
+        const startDateMobile = document.getElementById('startDateMobile');
+        if (startDateMobile) startDateMobile.value = '';
         updateActiveFilters();
         if (isAutoApplyEnabled()) {
           applyFilters();
@@ -783,6 +1007,8 @@ function updateActiveFilters() {
       label: `To: ${formatHumanDate(endDateInput.value)}`,
       remove: () => {
         endDateInput.value = '';
+        const endDateMobile = document.getElementById('endDateMobile');
+        if (endDateMobile) endDateMobile.value = '';
         updateActiveFilters();
         if (isAutoApplyEnabled()) {
           applyFilters();
@@ -800,6 +1026,10 @@ function updateActiveFilters() {
         label: `${selectedSeries.length} series selected`,
         remove: () => {
           allSeries.forEach(opt => opt.selected = true);
+          const seriesSelectMobile = document.getElementById('seriesSelectMobile');
+          if (seriesSelectMobile) {
+            Array.from(seriesSelectMobile.options).forEach(opt => opt.selected = true);
+          }
           updateActiveFilters();
           if (isAutoApplyEnabled()) {
             applyFilters();
@@ -809,26 +1039,44 @@ function updateActiveFilters() {
     }
   }
   
-  if (chips.length === 0) {
-    activeFiltersContainer.innerHTML = '';
-    return;
-  }
-  
-  activeFiltersContainer.innerHTML = chips.map(chip => `
+  const chipsHTML = chips.length > 0 ? chips.map(chip => `
     <div class="filter-chip">
       <span>${chip.label}</span>
       <button type="button" aria-label="Remove ${chip.label} filter">×</button>
     </div>
-  `).join('');
+  `).join('') : '';
   
-  // Add click handlers to remove buttons
-  activeFiltersContainer.querySelectorAll('.filter-chip button').forEach((btn, index) => {
-    btn.addEventListener('click', chips[index].remove);
-  });
+  // Update mobile container
+  if (activeFiltersContainer) {
+    activeFiltersContainer.innerHTML = chipsHTML;
+    activeFiltersContainer.querySelectorAll('.filter-chip button').forEach((btn, index) => {
+      btn.addEventListener('click', chips[index].remove);
+    });
+  }
+  
+  // Update desktop container
+  if (activeFiltersDesktop) {
+    activeFiltersDesktop.innerHTML = chipsHTML;
+    activeFiltersDesktop.querySelectorAll('.filter-chip button').forEach((btn, index) => {
+      btn.addEventListener('click', chips[index].remove);
+    });
+  }
+  
+  // Update badge on filter icon
+  if (filterBadge) {
+    if (chips.length > 0) {
+      filterBadge.textContent = chips.length.toString();
+    } else {
+      filterBadge.textContent = '';
+    }
+  }
 }
 
 function applyFilters() {
   try {
+    // Sync mobile to desktop before applying filters
+    syncMobileDesktopFilters('mobile-to-desktop');
+    
     const startDateInput = document.getElementById('startDate');
     const endDateInput = document.getElementById('endDate');
     const seriesSelect = document.getElementById('seriesSelect');
