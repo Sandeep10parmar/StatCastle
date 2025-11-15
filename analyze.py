@@ -1127,12 +1127,50 @@ def build_team_analytics(dfb: pd.DataFrame, dfw: pd.DataFrame, match_results: li
     
     return analytics
 
+def normalize_series_name(series_name: str) -> str:
+    """
+    Normalize series names to shorter format for display in dashboard filters.
+    
+    Rules:
+    - HPT20L_SERIES_XX -> HPTL(SXX) (e.g., HPT20L_SERIES_22 -> HPTL(S22))
+    - Season X - Professional Division (CODE) -> HUPL(CODE) (e.g., Season 10 - Professional Division (S10D3) -> HUPL(S10D3))
+    - Returns original name if no pattern matches
+    
+    Args:
+        series_name: Original series name from match data
+        
+    Returns:
+        Normalized series name for display
+    """
+    if not series_name:
+        return series_name
+    
+    # Pattern 1: HPT20L_SERIES_XX -> HPTL(SXX)
+    hpt20l_match = re.search(r'HPT20L_SERIES_(\d+)', series_name, re.I)
+    if hpt20l_match:
+        season_num = hpt20l_match.group(1)
+        return f"HPTL(S{season_num})"
+    
+    # Pattern 2: Season X - Division Name (CODE) -> HUPL(CODE)
+    # Extract code in parentheses (e.g., S10D3, S11D3)
+    paren_match = re.search(r'\(([A-Z0-9]+)\)', series_name)
+    if paren_match:
+        code = paren_match.group(1)
+        # Check if it's a HUPL format (Season X - ...)
+        if re.search(r'Season\s+\d+', series_name, re.I):
+            return f"HUPL({code})"
+    
+    # If no pattern matched, return original
+    return series_name
+
 def extract_series_list(dfb: pd.DataFrame) -> list:
-    """Extract unique series names from match data."""
+    """Extract unique series names from match data and normalize them for display."""
     if dfb.empty or "series" not in dfb.columns:
         return []
     series = dfb["series"].dropna().unique().tolist()
-    return sorted([s for s in series if s])
+    # Normalize series names for display in filters
+    normalized = [normalize_series_name(s) for s in series if s]
+    return sorted([s for s in normalized if s])
 
 def build_player_assets(dfb: pd.DataFrame, dfw: pd.DataFrame, roster_photos: dict[str, str]):
     assets = Path("team_dashboard/assets")

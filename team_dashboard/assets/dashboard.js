@@ -27,6 +27,7 @@ let isLoading = false;
 let loadingOverlay = null;
 let retryCount = 0;
 const MAX_RETRIES = 3;
+let seriesNameMapping = {}; // Map of normalized series name -> array of original series names
 
 // Mobile detection helper
 function isMobile() {
@@ -221,6 +222,31 @@ function showError(message, retryCallback = null) {
 function normalizePlayerName(name) {
   if (!name) return '';
   return name.trim();
+}
+
+// Helper function to normalize series names (matches Python logic)
+function normalizeSeriesName(seriesName) {
+  if (!seriesName) return seriesName;
+  
+  // Pattern 1: HPT20L_SERIES_XX -> HPTL(SXX)
+  const hpt20lMatch = seriesName.match(/HPT20L_SERIES_(\d+)/i);
+  if (hpt20lMatch) {
+    const seasonNum = hpt20lMatch[1];
+    return `HPTL(S${seasonNum})`;
+  }
+  
+  // Pattern 2: Season X - Division Name (CODE) -> HUPL(CODE)
+  const parenMatch = seriesName.match(/\(([A-Z0-9]+)\)/);
+  if (parenMatch) {
+    const code = parenMatch[1];
+    // Check if it's a HUPL format (Season X - ...)
+    if (/Season\s+\d+/i.test(seriesName)) {
+      return `HUPL(${code})`;
+    }
+  }
+  
+  // If no pattern matched, return original
+  return seriesName;
 }
 
 // Helper function to format date as human-readable (e.g., "1st Nov 2025")
@@ -686,7 +712,7 @@ async function loadData() {
       fetchJSON('assets/player_photos.json', 'player_photos'),
       fetchJSON('assets/match_results.json', 'match_results'),
       fetchJSON('assets/team_analytics.json?v=' + Date.now(), 'team_analytics'), // Cache busting
-      fetchJSON('assets/series_list.json', 'series_list')
+      fetchJSON('assets/series_list.json?v=' + Date.now(), 'series_list') // Cache busting
     ]);
     
     devLog('Data loaded:', {
@@ -702,6 +728,40 @@ async function loadData() {
       teamAnalytics: teamAnalytics || {}, 
       seriesList: seriesList || [] 
     };
+    
+    // Create mapping between normalized and original series names
+    // seriesList contains normalized names, matchResults contains original names
+    seriesNameMapping = {};
+    const originalSeriesNames = [...new Set((matchResults || []).map(m => m.series).filter(s => s))];
+    
+    // Build mapping: normalized -> array of original names
+    originalSeriesNames.forEach(originalName => {
+      const normalizedName = normalizeSeriesName(originalName);
+      if (!seriesNameMapping[normalizedName]) {
+        seriesNameMapping[normalizedName] = [];
+      }
+      if (!seriesNameMapping[normalizedName].includes(originalName)) {
+        seriesNameMapping[normalizedName].push(originalName);
+      }
+    });
+    
+    // Also add any normalized names from seriesList that might not be in matchResults yet
+    if (seriesList && seriesList.length > 0) {
+      seriesList.forEach(normalizedName => {
+        if (!seriesNameMapping[normalizedName]) {
+          // Try to find original names that normalize to this
+          const matchingOriginals = originalSeriesNames.filter(orig => 
+            normalizeSeriesName(orig) === normalizedName
+          );
+          if (matchingOriginals.length > 0) {
+            seriesNameMapping[normalizedName] = matchingOriginals;
+          } else {
+            // If no match found, use normalized name as both key and value
+            seriesNameMapping[normalizedName] = [normalizedName];
+          }
+        }
+      });
+    }
     
     // Initialize filteredData with all data
     filteredData = {
@@ -733,22 +793,23 @@ async function loadData() {
     // Load team logo dynamically
     loadTeamLogo(teamAnalytics, teamName);
     
-    // Populate series dropdown (desktop and mobile)
+    // Populate series dropdown (desktop and mobile) with normalized names
     const seriesSelect = document.getElementById('seriesSelect');
     const seriesSelectMobile = document.getElementById('seriesSelectMobile');
     const seriesSelects = [seriesSelect, seriesSelectMobile].filter(s => s !== null);
     
     if (seriesSelects.length > 0) {
-      const seriesToAdd = seriesList && seriesList.length > 0 ? seriesList : 
-        [...new Set((matchResults || []).map(m => m.series).filter(s => s))];
+      // Use normalized names from seriesList, or normalize original names from matchResults
+      const normalizedSeriesList = seriesList && seriesList.length > 0 ? seriesList : 
+        [...new Set(originalSeriesNames.map(s => normalizeSeriesName(s)))].sort();
       
       seriesSelects.forEach(select => {
         select.innerHTML = ''; // Clear first
-        if (seriesToAdd.length > 0) {
-          seriesToAdd.forEach(s => {
+        if (normalizedSeriesList.length > 0) {
+          normalizedSeriesList.forEach(normalizedName => {
             const opt = document.createElement('option');
-            opt.value = s;
-            opt.textContent = s;
+            opt.value = normalizedName; // Store normalized name as value
+            opt.textContent = normalizedName; // Display normalized name
             opt.selected = true;
             select.appendChild(opt);
           });
@@ -870,11 +931,12 @@ function applyFilterPreset(preset) {
         cutoffDate.setDate(cutoffDate.getDate() - 14); // 14 days before most recent match
         const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
         
-        // Get unique series that have matches after cutoff date
+        // Get unique series that have matches after cutoff date (use normalized names)
         const activeSeries = new Set();
         results.forEach(m => {
           if (m.series && m.match_date && m.match_date >= cutoffDateStr) {
-            activeSeries.add(m.series);
+            const normalizedName = normalizeSeriesName(m.series);
+            activeSeries.add(normalizedName);
           }
         });
         
@@ -883,12 +945,13 @@ function applyFilterPreset(preset) {
         if (activeSeries.size === 0) {
           sortedResults.slice(0, 5).forEach(m => {
             if (m.series) {
-              activeSeries.add(m.series);
+              const normalizedName = normalizeSeriesName(m.series);
+              activeSeries.add(normalizedName);
             }
           });
         }
         
-        // Select only active series in the dropdown
+        // Select only active series in the dropdown (dropdown uses normalized names)
         if (seriesSelect.options.length > 0 && activeSeries.size > 0) {
           Array.from(seriesSelect.options).forEach(opt => {
             opt.selected = activeSeries.has(opt.value);
@@ -896,9 +959,14 @@ function applyFilterPreset(preset) {
         }
         
         // Set date range to cover active league period
-        // Find earliest match date in active series
+        // Find earliest match date in active series (need to map normalized back to original)
+        const activeOriginalSeries = new Set();
+        activeSeries.forEach(normalizedName => {
+          const originalNames = seriesNameMapping[normalizedName] || [normalizedName];
+          originalNames.forEach(orig => activeOriginalSeries.add(orig));
+        });
         const activeMatches = results.filter(m => 
-          m.series && activeSeries.has(m.series) && m.match_date
+          m.series && activeOriginalSeries.has(m.series) && m.match_date
         );
         if (activeMatches.length > 0) {
           const activeDates = activeMatches.map(m => m.match_date).sort();
@@ -1095,7 +1163,14 @@ function applyFilters() {
     
     const startDate = startDateInput.value;
     const endDate = endDateInput.value;
-    const selectedSeries = Array.from(seriesSelect.selectedOptions).map(o => o.value);
+    const selectedNormalizedSeries = Array.from(seriesSelect.selectedOptions).map(o => o.value);
+    
+    // Map normalized series names back to original series names for filtering
+    const selectedOriginalSeries = new Set();
+    selectedNormalizedSeries.forEach(normalizedName => {
+      const originalNames = seriesNameMapping[normalizedName] || [normalizedName];
+      originalNames.forEach(orig => selectedOriginalSeries.add(orig));
+    });
     
     // Filter match results - all dates are now in YYYY-MM-DD format
     filteredData.matchResults = (allData.matchResults || []).filter(m => {
@@ -1107,7 +1182,8 @@ function applyFilters() {
         if (endDate && endDate.trim() && m.match_date > endDate) return false;
       }
       // Filter by series if series is specified and series filter is set
-      if (selectedSeries.length > 0 && m.series && !selectedSeries.includes(m.series)) return false;
+      // Use original series names for matching against match data
+      if (selectedOriginalSeries.size > 0 && m.series && !selectedOriginalSeries.has(m.series)) return false;
       return true;
     });
     
@@ -1309,9 +1385,10 @@ function renderHome() {
         if (!b.match_date) return -1;
         return b.match_date.localeCompare(a.match_date);
       });
-      tbody.innerHTML = sortedResults.slice(0, 5).map(m => 
-        `<tr><td>${formatHumanDate(m.match_date)}</td><td>${m.opponent || '-'}</td><td>${m.result || '-'}</td><td>${formatMatchType(m.match_type)}</td><td>${m.ground || '-'}</td><td>${m.series || '-'}</td></tr>`
-      ).join('');
+      tbody.innerHTML = sortedResults.slice(0, 5).map(m => {
+        const normalizedSeries = m.series ? normalizeSeriesName(m.series) : '-';
+        return `<tr><td>${formatHumanDate(m.match_date)}</td><td>${m.opponent || '-'}</td><td>${m.result || '-'}</td><td>${formatMatchType(m.match_type)}</td><td>${m.ground || '-'}</td><td>${normalizedSeries}</td></tr>`;
+      }).join('');
     }
     
     // Top batsmen - recalculate stats from filtered match-level data if filters are active
