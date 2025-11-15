@@ -13,8 +13,8 @@ Get StatCastle running in minutes:
 
 ```bash
 # 1️⃣ Clone the repository
-git clone https://github.com/<your-username>/statcastle.git
-cd statcastle
+git clone https://github.com/Sandeep10parmar/StatCastle.git
+cd StatCastle
 
 # 2️⃣ Configure your team
 cp config.sample.yaml config.yaml
@@ -162,8 +162,8 @@ If you prefer running locally without Docker:
 
 ```bash
 # 1️⃣ Clone and setup
-git clone https://github.com/<your-username>/statcastle.git
-cd statcastle
+git clone https://github.com/Sandeep10parmar/StatCastle.git
+cd StatCastle
 python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
@@ -364,7 +364,7 @@ StatCastle automatically deploys your dashboard to GitHub Pages on every push to
 
 3. **Access your dashboard:**
    ```
-   https://<your-username>.github.io/statcastle/team_dashboard/
+   https://sandeep10parmar.github.io/StatCastle/team_dashboard/
    ```
 
 ### Auto-Deployment
