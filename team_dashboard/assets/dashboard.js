@@ -1640,6 +1640,18 @@ function renderPlayer(name) {
   // Position stats
   const posTbody = document.querySelector('#positionStats tbody');
   if (posTbody) {
+    // Clear existing table cards on mobile before updating table (prevents cached data)
+    const posTable = document.getElementById('positionStats');
+    if (posTable) {
+      const posWrapper = posTable.closest('.table-wrapper');
+      if (posWrapper) {
+        const existingCards = posWrapper.querySelector('.table-cards');
+        if (existingCards) {
+          existingCards.remove();
+        }
+      }
+    }
+    
     if (ps.position_stats) {
       posTbody.innerHTML = Object.entries(ps.position_stats).sort((a, b) => parseInt(a[0]) - parseInt(b[0])).map(([pos, pstat]) =>
         `<tr><td>${pos}</td><td>${pstat.innings || 0}</td><td>${pstat.runs}</td><td>${pstat.balls}</td><td>${pstat.sr}</td><td>${pstat.avg}</td><td>${pstat.outs}</td></tr>`
@@ -1647,6 +1659,9 @@ function renderPlayer(name) {
     } else {
       posTbody.innerHTML = '<tr><td colspan="7">No position data</td></tr>';
     }
+    
+    // Recreate cards on mobile after table update
+    convertTableToCards('positionStats');
   }
   
   // Dismissal stats
@@ -1706,6 +1721,18 @@ function renderPlayer(name) {
   // Ground stats
   const groundTbody = document.querySelector('#groundStats tbody');
   if (groundTbody) {
+    // Clear existing table cards on mobile before updating table (prevents cached data)
+    const groundTable = document.getElementById('groundStats');
+    if (groundTable) {
+      const groundWrapper = groundTable.closest('.table-wrapper');
+      if (groundWrapper) {
+        const existingCards = groundWrapper.querySelector('.table-cards');
+        if (existingCards) {
+          existingCards.remove();
+        }
+      }
+    }
+    
     if (ps.ground_stats) {
       groundTbody.innerHTML = Object.entries(ps.ground_stats).map(([ground, gstat]) =>
         `<tr><td>${ground}</td><td>${gstat.innings}</td><td>${gstat.runs}</td><td>${gstat.balls}</td><td>${gstat.sr}</td><td>${gstat.avg}</td></tr>`
@@ -1713,11 +1740,26 @@ function renderPlayer(name) {
     } else {
       groundTbody.innerHTML = '<tr><td colspan="6">No ground data available</td></tr>';
     }
+    
+    // Recreate cards on mobile after table update
+    convertTableToCards('groundStats');
   }
   
   // Bowling ground stats
   const bowlGroundTbody = document.querySelector('#bowlGroundStats tbody');
   if (bowlGroundTbody) {
+    // Clear existing table cards on mobile before updating table (prevents cached data)
+    const bowlGroundTable = document.getElementById('bowlGroundStats');
+    if (bowlGroundTable) {
+      const bowlGroundWrapper = bowlGroundTable.closest('.table-wrapper');
+      if (bowlGroundWrapper) {
+        const existingCards = bowlGroundWrapper.querySelector('.table-cards');
+        if (existingCards) {
+          existingCards.remove();
+        }
+      }
+    }
+    
     if (ps.bowl_ground_stats) {
       bowlGroundTbody.innerHTML = Object.entries(ps.bowl_ground_stats).map(([ground, gstat]) => {
         const overs = gstat.overs?.toFixed ? gstat.overs.toFixed(1) : fmt(gstat.overs);
@@ -1728,6 +1770,9 @@ function renderPlayer(name) {
     } else {
       bowlGroundTbody.innerHTML = '<tr><td colspan="6">No bowling ground data available</td></tr>';
     }
+    
+    // Recreate cards on mobile after table update
+    convertTableToCards('bowlGroundStats');
   }
   
   // Render performance charts
@@ -1901,23 +1946,30 @@ function renderPlayerPerformanceCharts(playerName) {
     return;
   }
   
-  // Helper function to ensure canvas exists (recreate if destroyed)
+  // Helper function to ensure canvas exists
+  // Always removes and recreates canvas DOM element to prevent Chrome Mobile caching
+  // This is critical for mobile browsers where canvas elements are cached at browser/GPU level
   function ensureCanvas(canvasId, ariaLabel, containerSelector) {
-    let canvas = document.getElementById(canvasId);
-    if (!canvas) {
-      const container = document.querySelector(containerSelector);
-      if (container) {
-        // Remove any existing no-data message
-        const existingMsg = container.querySelector('.no-data-message');
-        if (existingMsg) existingMsg.remove();
-        
-        // Recreate the canvas element
-        canvas = document.createElement('canvas');
-        canvas.id = canvasId;
-        canvas.setAttribute('aria-label', ariaLabel);
-        container.appendChild(canvas);
-      }
+    const container = document.querySelector(containerSelector);
+    if (!container) return null;
+    
+    // Always remove existing canvas from DOM if it exists
+    // This prevents Chrome Mobile from caching the canvas element itself
+    const existingCanvas = document.getElementById(canvasId);
+    if (existingCanvas) {
+      existingCanvas.remove();
     }
+    
+    // Remove any existing no-data message
+    const existingMsg = container.querySelector('.no-data-message');
+    if (existingMsg) existingMsg.remove();
+    
+    // Create a completely fresh canvas element
+    const canvas = document.createElement('canvas');
+    canvas.id = canvasId;
+    canvas.setAttribute('aria-label', ariaLabel);
+    container.appendChild(canvas);
+    
     return canvas;
   }
   
@@ -1968,8 +2020,12 @@ function renderPlayerPerformanceCharts(playerName) {
   // Batting Trend Chart
   let battingCanvas = ensureCanvas('battingTrendChart', 'Batting performance trend over time', '.performance-charts-grid > .chart-container:first-child');
   if (battingCanvas) {
-    // Destroy and null out existing chart instance before rendering new one
-    // This prevents stale data from persisting, especially on mobile browsers
+    const recentBatting = ps.recent_batting || [];
+    const battingLabels = recentBatting.map(r => formatHumanDate(r.date)).reverse();
+    const battingRuns = recentBatting.map(r => r.runs || 0).reverse();
+    
+    // For mobile compatibility, always destroy and recreate chart
+    // Update() method doesn't work reliably on mobile browsers
     if (battingTrendChartInstance) {
       try {
         battingTrendChartInstance.destroy();
@@ -1979,86 +2035,98 @@ function renderPlayerPerformanceCharts(playerName) {
       battingTrendChartInstance = null;
     }
     
-    const recentBatting = ps.recent_batting || [];
-    const battingLabels = recentBatting.map(r => formatHumanDate(r.date)).reverse();
-    const battingRuns = recentBatting.map(r => r.runs || 0).reverse();
-    
-    renderChartOrMessage(
-      battingCanvas,
-      recentBatting.length > 0,
-      null, // Chart instance already destroyed above
-      () => {
-        // Clear canvas context again before creating new chart (defense in depth for mobile)
-        const battingCtx = battingCanvas.getContext('2d');
-        if (battingCtx) {
-          // Use canvas internal dimensions if set, otherwise use client dimensions as fallback
-          const width = battingCanvas.width || battingCanvas.clientWidth || 800;
-          const height = battingCanvas.height || battingCanvas.clientHeight || 400;
-          battingCtx.clearRect(0, 0, width, height);
-        }
-        
-        battingTrendChartInstance = new Chart(battingCtx, {
-          type: 'line',
-          data: {
-            labels: battingLabels,
-            datasets: [{
-              label: 'Runs Scored',
-              data: battingRuns,
-              borderColor: 'rgb(16, 185, 129)',
-              backgroundColor: 'rgba(16, 185, 129, 0.1)',
-              tension: 0.4,
-              fill: true,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              pointBackgroundColor: 'rgb(16, 185, 129)',
-              pointBorderColor: '#fff',
-              pointBorderWidth: 2
-            }]
+    if (recentBatting.length > 0) {
+      // Create new chart with fresh data
+      // Canvas is already a fresh DOM element (recreated by ensureCanvas), so no need for clearing
+      battingCanvas.style.display = 'block';
+      // Remove any no-data message
+      const noDataMsg = battingCanvas.parentElement.querySelector('.no-data-message');
+      if (noDataMsg) noDataMsg.remove();
+      
+      const battingCtx = battingCanvas.getContext('2d');
+      battingTrendChartInstance = new Chart(battingCtx, {
+        type: 'line',
+        data: {
+          labels: battingLabels,
+          datasets: [{
+            label: 'Runs Scored',
+            data: battingRuns,
+            borderColor: 'rgb(16, 185, 129)',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+            tension: 0.4,
+            fill: true,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: 'rgb(16, 185, 129)',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top'
+            },
+            title: {
+              display: true,
+              text: 'Batting Performance',
+              font: {
+                size: 14,
+                weight: 'bold'
+              }
+            }
           },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: true,
-                position: 'top'
-              },
+          scales: {
+            y: {
+              beginAtZero: true,
               title: {
                 display: true,
-                text: 'Batting Performance',
-                font: {
-                  size: 14,
-                  weight: 'bold'
-                }
+                text: 'Runs'
               }
             },
-            scales: {
-              y: {
-                beginAtZero: true,
-                title: {
-                  display: true,
-                  text: 'Runs'
-                }
-              },
-              x: {
-                title: {
-                  display: true,
-                  text: 'Date'
-                }
+            x: {
+              title: {
+                display: true,
+                text: 'Date'
               }
             }
           }
-        });
-      },
-      'No batting data available.'
-    );
+        }
+      });
+    } else {
+      // No data - destroy chart if it exists and show message
+      if (battingTrendChartInstance) {
+        try {
+          battingTrendChartInstance.destroy();
+          battingTrendChartInstance = null;
+        } catch (e) {
+          devWarn('Error destroying batting chart:', e);
+        }
+      }
+      battingCanvas.style.display = 'none';
+      const noDataMsg = battingCanvas.parentElement.querySelector('.no-data-message');
+      if (!noDataMsg) {
+        const msg = document.createElement('p');
+        msg.className = 'no-data-message';
+        msg.style.cssText = 'text-align:center; color:#64748B; padding:20px; margin:0;';
+        msg.textContent = 'No batting data available.';
+        battingCanvas.parentElement.appendChild(msg);
+      }
+    }
   }
   
   // Bowling Trend Chart
   let bowlingCanvas = ensureCanvas('bowlingTrendChart', 'Bowling performance trend over time', '.performance-charts-grid > .chart-container:last-child');
   if (bowlingCanvas) {
-    // Destroy and null out existing chart instance before rendering new one
-    // This prevents stale data from persisting, especially on mobile browsers
+    const recentBowling = ps.recent_bowling || [];
+    const bowlingLabels = recentBowling.map(r => formatHumanDate(r.date)).reverse();
+    const bowlingWickets = recentBowling.map(r => r.wickets || 0).reverse();
+    
+    // For mobile compatibility, always destroy and recreate chart
+    // Update() method doesn't work reliably on mobile browsers
     if (bowlingTrendChartInstance) {
       try {
         bowlingTrendChartInstance.destroy();
@@ -2068,82 +2136,90 @@ function renderPlayerPerformanceCharts(playerName) {
       bowlingTrendChartInstance = null;
     }
     
-    const recentBowling = ps.recent_bowling || [];
-    const bowlingLabels = recentBowling.map(r => formatHumanDate(r.date)).reverse();
-    const bowlingWickets = recentBowling.map(r => r.wickets || 0).reverse();
-    
-    renderChartOrMessage(
-      bowlingCanvas,
-      recentBowling.length > 0,
-      null, // Chart instance already destroyed above
-      () => {
-        // Clear canvas context again before creating new chart (defense in depth for mobile)
-        const bowlingCtx = bowlingCanvas.getContext('2d');
-        if (bowlingCtx) {
-          // Use canvas internal dimensions if set, otherwise use client dimensions as fallback
-          const width = bowlingCanvas.width || bowlingCanvas.clientWidth || 800;
-          const height = bowlingCanvas.height || bowlingCanvas.clientHeight || 400;
-          bowlingCtx.clearRect(0, 0, width, height);
-        }
-        
-        bowlingTrendChartInstance = new Chart(bowlingCtx, {
-          type: 'line',
-          data: {
-            labels: bowlingLabels,
-            datasets: [{
-              label: 'Wickets Taken',
-              data: bowlingWickets,
-              borderColor: 'rgb(239, 68, 68)',
-              backgroundColor: 'rgba(239, 68, 68, 0.1)',
-              tension: 0.4,
-              fill: true,
-              pointRadius: 4,
-              pointHoverRadius: 6,
-              pointBackgroundColor: 'rgb(239, 68, 68)',
-              pointBorderColor: '#fff',
-              pointBorderWidth: 2
-            }]
+    if (recentBowling.length > 0) {
+      // Create new chart with fresh data
+      // Canvas is already a fresh DOM element (recreated by ensureCanvas), so no need for clearing
+      bowlingCanvas.style.display = 'block';
+      // Remove any no-data message
+      const noDataMsg = bowlingCanvas.parentElement.querySelector('.no-data-message');
+      if (noDataMsg) noDataMsg.remove();
+      
+      const bowlingCtx = bowlingCanvas.getContext('2d');
+      bowlingTrendChartInstance = new Chart(bowlingCtx, {
+        type: 'line',
+        data: {
+          labels: bowlingLabels,
+          datasets: [{
+            label: 'Wickets Taken',
+            data: bowlingWickets,
+            borderColor: 'rgb(239, 68, 68)',
+            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+            tension: 0.4,
+            fill: true,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: 'rgb(239, 68, 68)',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top'
+            },
+            title: {
+              display: true,
+              text: 'Bowling Performance',
+              font: {
+                size: 14,
+                weight: 'bold'
+              }
+            }
           },
-          options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-              legend: {
-                display: true,
-                position: 'top'
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                stepSize: 1
               },
               title: {
                 display: true,
-                text: 'Bowling Performance',
-                font: {
-                  size: 14,
-                  weight: 'bold'
-                }
+                text: 'Wickets'
               }
             },
-            scales: {
-              y: {
-                beginAtZero: true,
-                ticks: {
-                  stepSize: 1
-                },
-                title: {
-                  display: true,
-                  text: 'Wickets'
-                }
-              },
-              x: {
-                title: {
-                  display: true,
-                  text: 'Date'
-                }
+            x: {
+              title: {
+                display: true,
+                text: 'Date'
               }
             }
           }
-        });
-      },
-      'No bowling data available.'
-    );
+        }
+      });
+    } else {
+      // No data - destroy chart if it exists and show message
+      if (bowlingTrendChartInstance) {
+        try {
+          bowlingTrendChartInstance.destroy();
+          bowlingTrendChartInstance = null;
+        } catch (e) {
+          devWarn('Error destroying bowling chart:', e);
+        }
+      }
+      bowlingCanvas.style.display = 'none';
+      const noDataMsg = bowlingCanvas.parentElement.querySelector('.no-data-message');
+      if (!noDataMsg) {
+        const msg = document.createElement('p');
+        msg.className = 'no-data-message';
+        msg.style.cssText = 'text-align:center; color:#64748B; padding:20px; margin:0;';
+        msg.textContent = 'No bowling data available.';
+        bowlingCanvas.parentElement.appendChild(msg);
+      }
+    }
   }
 }
 

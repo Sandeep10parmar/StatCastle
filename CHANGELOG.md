@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.5 — Mobile Player Stats Caching Fix (2025-11-15)
+- **Fixed Mobile Table Caching Issue**: Resolved issue where player stats tables (Batting by Position, Batting Stats by Ground, Bowling Stats by Ground) showed cached data from default player on Chrome Mobile
+  - Clear existing table cards before updating table data
+  - Recreate cards after table update to ensure fresh data display
+  - Fixes mobile-specific caching where table cards weren't updating when switching players
+- **Enhanced Chart Rendering**: Improved chart rendering for mobile browsers
+  - Canvas elements are now completely removed and recreated for each player switch
+  - Prevents Chrome Mobile from caching canvas elements at browser/GPU level
+  - Ensures charts always display correct player data
+
 ## v1.4 — Mobile Filter Experience Enhancement (2024-11-15)
 - **Mobile Filter Redesign**: Replaced space-consuming filter section with compact floating icon button
   - Floating filter icon button (bottom-right corner) for easy access on mobile
