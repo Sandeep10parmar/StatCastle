@@ -1,6 +1,20 @@
 # Changelog
 
-## v1.3 — Docker Support & Production Readiness (2025-01-XX)
+## v1.4 — Mobile Filter Experience Enhancement (2024-11-15)
+- **Mobile Filter Redesign**: Replaced space-consuming filter section with compact floating icon button
+  - Floating filter icon button (bottom-right corner) for easy access on mobile
+  - Bottom sheet modal that slides up smoothly with all filter controls
+  - Badge indicator showing active filter count on icon
+  - Active filter chips remain visible outside modal for quick reference
+- **Cross-Platform Sync**: Full synchronization between mobile and desktop filter inputs
+- **Enhanced Mobile UX**: 
+  - Significantly reduced vertical space usage on mobile screens
+  - Smooth animations and transitions for modal open/close
+  - Touch-friendly filter controls optimized for mobile interaction
+- **Desktop Experience**: Original filter section remains unchanged for desktop users
+- **Accessibility**: Added proper ARIA labels, keyboard navigation, and focus management
+
+## v1.3 — Docker Support & Production Readiness (2025-11-12)
 - **Docker Support**: Multi-stage Dockerfile for easy deployment
   - No local setup required - run in minutes with `docker-compose up`
   - Includes Playwright browser installation
@@ -26,3 +40,12 @@
 - Player dropdown insights (runs, SR, dot%, wickets, economy, impact games)
 - Improved dashboard/PDF outputs and folder structure
 - Updated README with Quick Start; updated config.sample.yaml
+
+## v1.1 — Team-Based Discovery (2025-10-31)
+- Team-based `teamResults.do` discovery
+- Initial team-based match discovery implementation
+
+## v1.0 — Initial Release (2025-10-25)
+- Initial release with league-based discovery (deprecated)
+- Basic dashboard functionality
+- Match data export and analysis

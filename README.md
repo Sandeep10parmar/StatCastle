@@ -490,6 +490,7 @@ statcastle/
 
 | Version | Changes |
 |---------|---------|
+| **v1.4** | Mobile filter redesign with bottom sheet modal and floating icon button |
 | **v1.3** | Docker support, updated README, K8s examples |
 | **v1.2** | Player dropdown insights, multi-tournament merge, enhanced analytics |
 | **v1.1** | Team-based `teamResults.do` discovery |
