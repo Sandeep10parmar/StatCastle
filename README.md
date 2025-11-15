@@ -475,6 +475,14 @@ statcastle/
 3. Check GitHub Issues for known problems
 4. Verify your `config.yaml` matches the sample format
 
+### Issues & Feature Requests
+
+Found a bug or have an idea for a new feature? We'd love to hear from you!
+
+- **Submit an Issue**: [Open an issue on GitHub](https://github.com/Sandeep10parmar/StatCastle/issues)
+- **Bug Reports**: Please include steps to reproduce, error messages, and your environment (Docker/local, Python version, etc.)
+- **Feature Requests**: Describe the feature you'd like to see and how it would help you
+
 ---
 
 ## 📚 Documentation
