@@ -50,6 +50,11 @@ leagues:
     league_id: 23          # Optional; helps separate subfolders
     team_id: 201           # Required for teamResults-based discovery
 
+  - base_path: "https://cricclubs.com/HoustonPremierT20League"  # Base URL (no trailing slash)
+    club_id: 1366          # Found in every CricClubs URL
+    league_id: 27          # Optional; helps separate subfolders
+    team_id: 650           # Required for teamResults-based discovery
+
   # Example of adding more tournaments:
   # - base_path: "https://cricclubs.com/HoustonUnitedPremierLeague"
   #   club_id: 1366
