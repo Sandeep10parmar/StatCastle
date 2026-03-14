@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:  # Allows manual run from Actions tab
   schedule:
     - cron: "0 12 * * 1"  # Every Monday 12:00 UTC
 
