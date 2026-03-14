@@ -271,7 +271,7 @@ def parse_match_metadata(full_html: str | None, info_html: str | None = None, te
         # Ground/Venue - from table with <th>Ground:</th> or <th>Venue:</th>
         ground_match = re.search(r'<th[^>]*>(?:Ground|Venue|Location):</th>\s*<th[^>]*>([^<]+)', info_text, re.I | re.S)
         if ground_match:
-            meta["ground"] = norm(ground_match.group(1))
+            meta["ground"] = normalize_ground_name(norm(ground_match.group(1)))
         
         # Toss - from table with <th>Toss:</th>
         toss_match = re.search(r'<th[^>]*>Toss:</th>\s*<th[^>]*>([^<]+(?:<[^>]+>[^<]+</[^>]+>)*[^<]*)', info_text, re.I | re.S)
@@ -1126,6 +1126,17 @@ def build_team_analytics(dfb: pd.DataFrame, dfw: pd.DataFrame, match_results: li
             }
     
     return analytics
+
+GROUND_NAME_ALIASES = {
+    "Badri Cricket Ground #3": "Badri Cricket Ground - 3",
+}
+
+def normalize_ground_name(ground: str | None) -> str | None:
+    """Normalize venue name variants to canonical form."""
+    if not ground:
+        return ground
+    g = norm(ground)
+    return GROUND_NAME_ALIASES.get(g, g)
 
 def normalize_series_name(series_name: str) -> str:
     """
