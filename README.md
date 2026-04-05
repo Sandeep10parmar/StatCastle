@@ -498,6 +498,8 @@ Found a bug or have an idea for a new feature? We'd love to hear from you!
 
 | Version | Changes |
 |---------|---------|
+| **v1.6** | Manual CI runs (`workflow_dispatch`), match-count pipe fix, Badri ground name normalization |
+| **v1.5** | Mobile player stats table/chart caching fix on Chrome Mobile |
 | **v1.4** | Mobile filter redesign with bottom sheet modal and floating icon button |
 | **v1.3** | Docker support, updated README, K8s examples |
 | **v1.2** | Player dropdown insights, multi-tournament merge, enhanced analytics |

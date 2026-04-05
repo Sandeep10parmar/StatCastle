@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.6 — CI & Venue Normalization (2026-04-04)
+- **Venue name merge**: Normalized `Badri Cricket Ground #3` to `Badri Cricket Ground - 3` in `analyze.py` so win rate by ground and player ground stats use a single label (`GROUND_NAME_ALIASES` / `normalize_ground_name()`).
+- **GitHub Actions**: Added `workflow_dispatch` so the build-and-deploy workflow can be run manually from the Actions tab.
+- **GitHub Actions**: Fixed `cat: write error: Broken pipe` during match count verification by using `find … -exec cat {} +` and a safer grep fallback.
+
 ## v1.5 — Mobile Player Stats Caching Fix (2025-11-15)
 - **Fixed Mobile Table Caching Issue**: Resolved issue where player stats tables (Batting by Position, Batting Stats by Ground, Bowling Stats by Ground) showed cached data from default player on Chrome Mobile
   - Clear existing table cards before updating table data
