@@ -199,6 +199,12 @@ def test_match_results():
     for match in match_results:
         match_id = match.get("match_id")
         for field in required_fields:
+            if (
+                field == "opponent"
+                and match.get("result_detail") in ("Abandoned", "No result")
+                and not match.get(field)
+            ):
+                continue
             if field not in match or not match.get(field):
                 missing_fields.append((match_id, field))
     

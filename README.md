@@ -50,17 +50,16 @@ docker-compose up
 ### Dashboard Features
 
 #### Home Page
-- **Recent Match Results** — Last 5 matches with opponent, result, ground, series
+- **Recent Match Results** — Last 5 matches (with current filters) with opponent, result, ground, series; special outcomes show both result and detail (e.g. **Draw** + Abandoned, **Win** + Forfeit)
 - **Top 5 Batsmen** — Best strike rate, most runs, most 4s, most 6s
 - **Top 5 Bowlers** — Most wickets, best economy, best strike rate, most dot balls
 - **Player of the Match** — Recent MoM awards
 
 #### Team Stats Page
-- **Win Percentage** — Overall team win rate
-- **Win Rate Over Time** — Visual chart showing performance trends
-- **Win Rate by Ground** — Performance breakdown by venue
-- **Win Rate by Toss Outcome** — Stats when batting first vs bowling first
-- **Win Rate by Match Type** — League vs Playoff performance
+- **Team Recent Form & Momentum** — Last matches as W/L/D (oldest → newest) with rolling win rate, streak, and comparison to the prior window; **W(F)** / **L(F)** mark forfeit wins/losses; respects the same **date and series filters** as the rest of the dashboard
+- **Win Rate by Ground** — W/L/D and win % by venue; **recomputed from filtered matches** in the browser (aligned with `analyze.py` rules, excluding Abandoned / No result / Forfeit from those counts)
+- **Win Rate by Toss Outcome** — Same filtering and exclusion rules as ground
+- **Win Rate by Match Type** — League vs playoff split with the same filtering and exclusion rules
 
 #### Player Stats Page
 - **Player Dropdown** — Select any player to view detailed stats
@@ -71,7 +70,7 @@ docker-compose up
 
 #### Advanced Filtering
 - **Date Range Picker** — Filter by match date (default: last 30 days)
-- **Series Multi-Select** — Filter by tournament/series
+- **Series Multi-Select** — Filter by tournament/series; series options include every competition that appears in **match results**, including metadata-only games. When **all** series are selected, series filtering is not applied (equivalent to “all competitions”)
 - **Auto-apply Toggle** — Real-time filtering as you change settings
 - **Filter Presets** — Quick access to "Last 5 matches", "This season", "Last 3 months", "All time"
 
@@ -80,10 +79,10 @@ docker-compose up
 - Top 5 batsmen (runs, strike rate, boundaries)
 - Top 5 bowlers (wickets, economy, strike rate)
 - Dot-ball % leaderboard
-- Win-rate by ground, toss outcome, and match type
+- Win-rate by ground, toss outcome, and match type in **`team_analytics.json`** (played matches only: **Forfeit**, **Abandoned**, and **No result** games are listed in **`match_results.json`** but omitted from these W/L aggregates and from player innings totals)
 - Per-player breakdown with position analysis
 - Aggregated performance across multiple tournaments
-- Match results with full context (opponent, ground, series, toss)
+- Match results with full context (opponent, ground, series, toss, `result_detail` when relevant)
 
 ---
 
@@ -464,7 +463,7 @@ statcastle/
 | `Found 0 matches` | Check `team_id`, `league_id`, and `club_id` in config.yaml |
 | `ModuleNotFoundError` | Run `pip install -r requirements.txt` (or use Docker) |
 | `Playwright browser not found` | Run `playwright install chromium` (or use Docker) |
-| Empty dashboard | Run `python3 analyze.py` to generate JSON files |
+| Empty dashboard | Run `python3 analyze.py` to generate JSON files; hard-refresh the browser so cached `match_results.json` is not reused |
 | Docker build fails | Ensure Docker has enough memory (2GB+) |
 | GitHub Pages not updating | Check Actions tab for workflow errors |
 
@@ -498,6 +497,11 @@ Found a bug or have an idea for a new feature? We'd love to hear from you!
 
 | Version | Changes |
 |---------|---------|
+| **v1.9.2** | Batting validation: **0(0)** dismissals (e.g. run out without facing); SR cap **600** for scoring innings; debug-CSV rebuild counts outs from dismissal text |
+| **v1.9.1** | **0 (nb)** ducks with SR **0.00** accepted so **Recent batting** shows innings like **0 (2b)** |
+| **v1.9** | Filtered team win-rate tables; forfeit/abandoned excluded from aggregates; series list merge; Team Recent Form & Momentum + W(F)/L(F); removed overall win % card |
+| **v1.8** | Abandoned / no-result / forfeit parsing, `result_detail`, metadata-only `match_results`, dashboard display |
+| **v1.7** | Team form & momentum strip (replaces monthly win-rate chart) |
 | **v1.6** | Manual CI runs (`workflow_dispatch`), match-count pipe fix, Badri ground name normalization |
 | **v1.5** | Mobile player stats table/chart caching fix on Chrome Mobile |
 | **v1.4** | Mobile filter redesign with bottom sheet modal and floating icon button |

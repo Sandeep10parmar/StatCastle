@@ -1235,6 +1235,12 @@ button:focus {
   max-height: 100%;
 }
 
+/* Player stats: bar chart x-axis labels (opponent · date) need a bit more room */
+.performance-charts-grid .chart-container {
+  min-height: 300px;
+}
+
+
 @media (max-width: 768px) {
   .chart-container {
     height: 250px;
@@ -1247,6 +1253,111 @@ button:focus {
   .chart-container {
     height: 200px;
     padding: 12px;
+  }
+}
+
+/* Home table: Abandoned / Forfeit label next to W/L/D */
+.result-detail {
+  display: inline-block;
+  margin-left: 6px;
+  font-size: 0.85em;
+  color: var(--text-secondary);
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+/* Team recent form & momentum (team stats page) */
+.form-momentum-card {
+  margin: 24px 0;
+  background: var(--bg-primary);
+  padding: 20px 20px 22px;
+  border-radius: 12px;
+  border: 2px solid var(--border);
+  box-shadow: 0 2px 6px var(--shadow);
+}
+
+.form-momentum-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  align-items: baseline;
+  margin-bottom: 16px;
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.form-momentum-metrics strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.form-momentum-trend {
+  font-size: 15px;
+}
+
+.form-momentum-trend--up {
+  color: var(--success);
+}
+
+.form-momentum-trend--down {
+  color: var(--error);
+}
+
+.form-momentum-trend--flat {
+  color: var(--text-secondary);
+}
+
+.form-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.form-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: -0.02em;
+  border: 2px solid transparent;
+  box-sizing: border-box;
+}
+
+.form-pill--win {
+  background: var(--success-bg);
+  color: #047857;
+  border-color: #6ee7b7;
+}
+
+.form-pill--loss {
+  background: var(--error-bg);
+  color: #b91c1c;
+  border-color: #fca5a5;
+}
+
+.form-pill--draw {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border-color: var(--border);
+}
+
+@media (max-width: 480px) {
+  .form-momentum-card {
+    padding: 16px;
+    margin: 16px 0;
+  }
+
+  .form-pill {
+    min-width: 40px;
+    height: 32px;
+    padding: 0 6px;
+    font-size: 12px;
   }
 }
 

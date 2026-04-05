@@ -709,8 +709,8 @@ async function loadData() {
     showLoading('Loading player statistics...');
     const [stats, photos, matchResults, teamAnalytics, seriesList] = await Promise.all([
       fetchJSON('assets/player_stats.json?v=' + Date.now(), 'player_stats'), // Cache busting
-      fetchJSON('assets/player_photos.json', 'player_photos'),
-      fetchJSON('assets/match_results.json', 'match_results'),
+      fetchJSON('assets/player_photos.json?v=' + Date.now(), 'player_photos'),
+      fetchJSON('assets/match_results.json?v=' + Date.now(), 'match_results'),
       fetchJSON('assets/team_analytics.json?v=' + Date.now(), 'team_analytics'), // Cache busting
       fetchJSON('assets/series_list.json?v=' + Date.now(), 'series_list') // Cache busting
     ]);
@@ -1164,7 +1164,11 @@ function applyFilters() {
     const startDate = startDateInput.value;
     const endDate = endDateInput.value;
     const selectedNormalizedSeries = Array.from(seriesSelect.selectedOptions).map(o => o.value);
-    
+    const numSeriesOptions = seriesSelect.options.length;
+    const numSeriesSelected = seriesSelect.selectedOptions.length;
+    const allSeriesSelected =
+      numSeriesOptions === 0 || numSeriesSelected === numSeriesOptions;
+
     // Map normalized series names back to original series names for filtering
     const selectedOriginalSeries = new Set();
     selectedNormalizedSeries.forEach(normalizedName => {
@@ -1181,9 +1185,16 @@ function applyFilters() {
         if (startDate && startDate.trim() && m.match_date < startDate) return false;
         if (endDate && endDate.trim() && m.match_date > endDate) return false;
       }
-      // Filter by series if series is specified and series filter is set
-      // Use original series names for matching against match data
-      if (selectedOriginalSeries.size > 0 && m.series && !selectedOriginalSeries.has(m.series)) return false;
+      // When every series in the dropdown is selected, do not filter by series (same as "all competitions").
+      // Otherwise subset selections only show matches whose original series maps to a selected option.
+      if (
+        !allSeriesSelected &&
+        selectedOriginalSeries.size > 0 &&
+        m.series &&
+        !selectedOriginalSeries.has(m.series)
+      ) {
+        return false;
+      }
       return true;
     });
     
@@ -1220,7 +1231,7 @@ function applyFilters() {
     // Player stats and team analytics - use all data (filtering by match would require match-level data in stats)
     filteredData.stats = allData.stats || {};
     filteredData.teamAnalytics = allData.teamAnalytics || {};
-    
+
     renderHome();
     renderTeamStats();
     loadPlayerData();
@@ -1246,12 +1257,246 @@ function applyFilters() {
   }
 }
 
-// Helper function to recalculate stats from filtered match-level data
+function filterStatsRowsByMatchKeys(rows, validMatchKeys) {
+  if (!validMatchKeys || validMatchKeys.size === 0) return rows || [];
+  return (rows || []).filter(r => {
+    if (!r || !r.date || !r.opponent) return false;
+    const k = `${r.date}|${String(r.opponent).trim()}`;
+    return validMatchKeys.has(k);
+  });
+}
+
+/**
+ * When date/series filters are active, re-derive player sections that are otherwise all-time
+ * (card, positions, grounds, dismissals, PoM, recent lists) from batting_innings / bowling_spells.
+ */
+function derivePlayerStatsForFilter(ps, validMatchKeys) {
+  if (!validMatchKeys || validMatchKeys.size === 0) return ps;
+
+  const batPool =
+    ps.batting_innings && ps.batting_innings.length > 0
+      ? ps.batting_innings
+      : ps.recent_batting || [];
+  const bowlPool =
+    ps.bowling_spells && ps.bowling_spells.length > 0
+      ? ps.bowling_spells
+      : ps.recent_bowling || [];
+  const batRows = filterStatsRowsByMatchKeys(batPool, validMatchKeys);
+  const bowlRows = filterStatsRowsByMatchKeys(bowlPool, validMatchKeys);
+
+  const out = { ...ps };
+
+  let bruns = 0;
+  let bballs = 0;
+  let b4 = 0;
+  let b6 = 0;
+  let bouts = 0;
+  let bdb = 0;
+  let bbp = 0;
+  for (const r of batRows) {
+    bruns += r.runs || 0;
+    bballs += r.balls || 0;
+    b4 += r['4s'] || 0;
+    b6 += r['6s'] || 0;
+    bouts += r.is_out ? 1 : 0;
+    bdb += r.bat_dot_balls || 0;
+    bbp += r.bat_bbp_balls || 0;
+  }
+  out.runs = bruns;
+  out.balls = bballs;
+  out['4s'] = b4;
+  out['6s'] = b6;
+  out.outs = bouts;
+  out.sr = bballs > 0 ? Math.round((bruns / bballs) * 1000) / 10 : 0;
+  out.avg = bouts > 0 ? Math.round((bruns / bouts) * 100) / 100 : 0;
+
+  if (bbp > 0) {
+    out.bat_dot_pct = Math.round((bdb / bbp) * 1000) / 10;
+    out.bat_dot_balls = bdb;
+    out.bat_tracked_balls = bbp;
+    if (out.dot_pct === undefined) out.dot_pct = out.bat_dot_pct;
+  } else {
+    out.bat_dot_pct = 0;
+    out.bat_dot_balls = 0;
+    out.bat_tracked_balls = 0;
+  }
+
+  const byPos = {};
+  for (const r of batRows) {
+    if (r.position == null) continue;
+    const pk = String(r.position);
+    if (!byPos[pk]) byPos[pk] = { runs: 0, balls: 0, outs: 0, innings: 0 };
+    byPos[pk].runs += r.runs || 0;
+    byPos[pk].balls += r.balls || 0;
+    byPos[pk].outs += r.is_out ? 1 : 0;
+    byPos[pk].innings += 1;
+  }
+  const position_stats = {};
+  Object.keys(byPos).forEach(pk => {
+    const g = byPos[pk];
+    const sr = g.balls > 0 ? Math.round((g.runs / g.balls) * 1000) / 10 : 0;
+    const avg = g.outs > 0 ? Math.round((g.runs / g.outs) * 100) / 100 : 0;
+    position_stats[pk] = {
+      runs: g.runs,
+      balls: g.balls,
+      outs: g.outs,
+      innings: g.innings,
+      sr,
+      avg,
+    };
+  });
+  out.position_stats = position_stats;
+
+  const byG = {};
+  for (const r of batRows) {
+    if (!r.ground) continue;
+    const gk = r.ground;
+    if (!byG[gk]) byG[gk] = { runs: 0, balls: 0, outs: 0, innings: 0 };
+    byG[gk].runs += r.runs || 0;
+    byG[gk].balls += r.balls || 0;
+    byG[gk].outs += r.is_out ? 1 : 0;
+    byG[gk].innings += 1;
+  }
+  const ground_stats = {};
+  Object.keys(byG).forEach(gk => {
+    const g = byG[gk];
+    const sr = g.balls > 0 ? Math.round((g.runs / g.balls) * 1000) / 10 : 0;
+    const avg = g.outs > 0 ? Math.round((g.runs / g.outs) * 100) / 100 : 0;
+    ground_stats[gk] = {
+      runs: g.runs,
+      balls: g.balls,
+      innings: g.innings,
+      sr,
+      avg,
+    };
+  });
+  out.ground_stats = ground_stats;
+
+  const dcounts = {};
+  for (const r of batRows) {
+    const d = r.dismissal || 'other';
+    dcounts[d] = (dcounts[d] || 0) + 1;
+  }
+  const nbat = batRows.length;
+  const dismissal_stats = {};
+  if (nbat > 0) {
+    Object.keys(dcounts).forEach(d => {
+      dismissal_stats[d] = {
+        count: dcounts[d],
+        pct: Math.round((dcounts[d] / nbat) * 1000) / 10,
+      };
+    });
+  }
+  out.dismissal_stats = dismissal_stats;
+
+  const sortedBat = [...batRows].sort((a, b) =>
+    String(b.date || '').localeCompare(String(a.date || ''))
+  );
+  out.recent_batting = sortedBat.slice(0, 5).map(r => ({
+    runs: r.runs,
+    balls: r.balls,
+    date: r.date,
+    opponent: r.opponent,
+  }));
+
+  let wk = 0;
+  let rc = 0;
+  let tb = 0;
+  let tdots = 0;
+  for (const r of bowlRows) {
+    wk += r.wickets || 0;
+    rc += r.runs || 0;
+    const b =
+      r.balls != null && r.balls > 0
+        ? r.balls
+        : (() => {
+            const overs = r.overs || 0;
+            const wo = Math.floor(overs);
+            const bi = Math.round((overs % 1) * 10);
+            return wo * 6 + bi;
+          })();
+    tb += b;
+    tdots += r.dots || 0;
+  }
+  out.wickets = wk;
+  out.runs_conceded = rc;
+  out.overs = Math.floor(tb / 6) + (tb % 6) / 10;
+  out.econ = tb > 0 ? Math.round((rc / tb) * 6 * 100) / 100 : 0;
+  out.dot_balls = tdots;
+  out.bowl_dot_pct = tb > 0 ? Math.round((tdots / tb) * 1000) / 10 : 0;
+  out.bowl_total_balls = tb;
+
+  const sortedBowl = [...bowlRows].sort((a, b) =>
+    String(b.date || '').localeCompare(String(a.date || ''))
+  );
+  out.recent_bowling = sortedBowl.slice(0, 5).map(r => ({
+    wickets: r.wickets,
+    runs: r.runs,
+    overs: r.overs,
+    date: r.date,
+    opponent: r.opponent,
+  }));
+
+  const byBg = {};
+  for (const r of bowlRows) {
+    if (!r.ground) continue;
+    if (!byBg[r.ground]) {
+      byBg[r.ground] = { innings: 0, balls: 0, wickets: 0, runs: 0, dots: 0 };
+    }
+    byBg[r.ground].innings += 1;
+    const b =
+      r.balls != null && r.balls > 0
+        ? r.balls
+        : (() => {
+            const overs = r.overs || 0;
+            const wo = Math.floor(overs);
+            const bi = Math.round((overs % 1) * 10);
+            return wo * 6 + bi;
+          })();
+    byBg[r.ground].balls += b;
+    byBg[r.ground].wickets += r.wickets || 0;
+    byBg[r.ground].runs += r.runs || 0;
+    byBg[r.ground].dots += r.dots || 0;
+  }
+  const bowl_ground_stats = {};
+  Object.keys(byBg).forEach(gk => {
+    const g = byBg[gk];
+    const dotPct = g.balls > 0 ? Math.round((g.dots / g.balls) * 1000) / 10 : 0;
+    const econ = g.balls > 0 ? Math.round((g.runs / g.balls) * 6 * 100) / 100 : 0;
+    const overs = Math.floor(g.balls / 6) + (g.balls % 6) / 10;
+    bowl_ground_stats[gk] = {
+      innings: g.innings,
+      overs,
+      dot_pct: dotPct,
+      wickets: g.wickets,
+      econ,
+    };
+  });
+  out.bowl_ground_stats = bowl_ground_stats;
+
+  const poms = (ps.pom_matches || []).filter(m => {
+    if (!m || !m.date || !m.opponent) return false;
+    const k = `${m.date}|${String(m.opponent).trim()}`;
+    return validMatchKeys.has(k);
+  });
+  out.pom_matches = poms;
+  out.pom_count = poms.length;
+
+  out.best_batting = sortedBat.slice(0, 3).map(r => `${r.runs} (${r.balls}b)`);
+  out.best_bowling = sortedBowl.slice(0, 3).map(r => {
+    const o = r.overs != null ? r.overs : 0;
+    return `${r.wickets || 0}/${r.runs || 0} (${o} ov)`;
+  });
+
+  return out;
+}
+
+// Helper function to recalculate stats from filtered match-level data (home page top lists)
 function calculateFilteredStats(playerStats, validMatchKeys) {
   if (!validMatchKeys || validMatchKeys.size === 0) {
-    return null; // No filters active, use all-time stats
+    return null;
   }
-  
+
   const filteredStats = {
     runs: 0,
     balls: 0,
@@ -1262,116 +1507,157 @@ function calculateFilteredStats(playerStats, validMatchKeys) {
     runs_conceded: 0,
     dot_balls: 0,
     wides: 0,
-    noballs: 0
+    noballs: 0,
   };
-  
-  // Filter and aggregate batting stats from recent_batting
-  if (playerStats.recent_batting && Array.isArray(playerStats.recent_batting)) {
-    const filteredBatting = playerStats.recent_batting.filter(match => {
-      if (!match.date || !match.opponent) return false;
-      const key = `${match.date}|${match.opponent}`;
-      return validMatchKeys.has(key);
-    });
-    
-    filteredBatting.forEach(match => {
-      filteredStats.runs += match.runs || 0;
-      filteredStats.balls += match.balls || 0;
-    });
-    
-    // Calculate strike rate (rounded to 1 decimal place)
-    if (filteredStats.balls > 0) {
-      filteredStats.sr = Math.round((filteredStats.runs / filteredStats.balls) * 1000) / 10;
-    } else {
-      filteredStats.sr = 0;
+
+  const batPool =
+    playerStats.batting_innings && playerStats.batting_innings.length > 0
+      ? playerStats.batting_innings
+      : playerStats.recent_batting || [];
+  const filteredBatting = filterStatsRowsByMatchKeys(
+    Array.isArray(batPool) ? batPool : [],
+    validMatchKeys
+  );
+
+  let summed4s6sFromRows = false;
+  filteredBatting.forEach(match => {
+    filteredStats.runs += match.runs || 0;
+    filteredStats.balls += match.balls || 0;
+    if (Object.prototype.hasOwnProperty.call(match, '4s')) {
+      filteredStats['4s'] += match['4s'] || 0;
+      summed4s6sFromRows = true;
     }
+    if (Object.prototype.hasOwnProperty.call(match, '6s')) {
+      filteredStats['6s'] += match['6s'] || 0;
+      summed4s6sFromRows = true;
+    }
+  });
+
+  if (filteredStats.balls > 0) {
+    filteredStats.sr = Math.round((filteredStats.runs / filteredStats.balls) * 1000) / 10;
+  } else {
+    filteredStats.sr = 0;
   }
-  
-  // Filter and aggregate bowling stats from recent_bowling
-  if (playerStats.recent_bowling && Array.isArray(playerStats.recent_bowling)) {
-    const filteredBowling = playerStats.recent_bowling.filter(match => {
-      if (!match.date || !match.opponent) return false;
-      const key = `${match.date}|${match.opponent}`;
-      return validMatchKeys.has(key);
-    });
-    
-    let totalBalls = 0;
-    filteredBowling.forEach(match => {
-      filteredStats.wickets += match.wickets || 0;
-      filteredStats.runs_conceded += match.runs || 0;
-      // Convert overs to balls (overs format: X.Y where Y is balls in that over, e.g., 2.3 = 2 overs 3 balls = 15 balls)
-      const overs = match.overs || 0;
-      const wholeOvers = Math.floor(overs);
-      const ballsInOver = Math.round((overs % 1) * 10);
-      const balls = wholeOvers * 6 + ballsInOver;
-      totalBalls += balls;
-    });
-    
-    // Store totalBalls for use in dot percentage calculation
-    filteredStats._totalBalls = totalBalls;
-    
-    // Convert total balls back to overs (e.g., 15 balls = 2.3 overs)
-    filteredStats.overs = Math.floor(totalBalls / 6) + (totalBalls % 6) / 10;
-    
-    // Calculate economy
-    if (totalBalls > 0) {
-      filteredStats.econ = (filteredStats.runs_conceded / totalBalls) * 6;
-    } else {
-      filteredStats.econ = 0;
+
+  const bowlPool =
+    playerStats.bowling_spells && playerStats.bowling_spells.length > 0
+      ? playerStats.bowling_spells
+      : playerStats.recent_bowling || [];
+  const filteredBowling = filterStatsRowsByMatchKeys(
+    Array.isArray(bowlPool) ? bowlPool : [],
+    validMatchKeys
+  );
+
+  let totalBalls = 0;
+  let summedDotsFromRows = false;
+  filteredBowling.forEach(match => {
+    filteredStats.wickets += match.wickets || 0;
+    filteredStats.runs_conceded += match.runs || 0;
+    const balls =
+      match.balls != null && match.balls > 0
+        ? match.balls
+        : (() => {
+            const overs = match.overs || 0;
+            const wholeOvers = Math.floor(overs);
+            const ballsInOver = Math.round((overs % 1) * 10);
+            return wholeOvers * 6 + ballsInOver;
+          })();
+    totalBalls += balls;
+    if (Object.prototype.hasOwnProperty.call(match, 'dots')) {
+      filteredStats.dot_balls += match.dots || 0;
+      summedDotsFromRows = true;
     }
-    
-    // Calculate bowling strike rate
-    if (filteredStats.wickets > 0) {
-      filteredStats.bowl_sr = totalBalls / filteredStats.wickets;
-    } else {
-      filteredStats.bowl_sr = 0;
-    }
+  });
+
+  filteredStats._totalBalls = totalBalls;
+  filteredStats.overs = Math.floor(totalBalls / 6) + (totalBalls % 6) / 10;
+
+  if (totalBalls > 0) {
+    filteredStats.econ = (filteredStats.runs_conceded / totalBalls) * 6;
+  } else {
+    filteredStats.econ = 0;
   }
-  
-  // For metrics not available in match-level data (4s, 6s, dot_balls), estimate proportionally
-  // Calculate proportion of filtered runs for batting (4s and 6s)
-  if (filteredStats.runs > 0 && playerStats.runs > 0 && playerStats['4s'] !== undefined) {
+
+  if (filteredStats.wickets > 0) {
+    filteredStats.bowl_sr = totalBalls / filteredStats.wickets;
+  } else {
+    filteredStats.bowl_sr = 0;
+  }
+
+  if (summedDotsFromRows && totalBalls > 0) {
+    filteredStats.bowl_dot_pct =
+      Math.round((filteredStats.dot_balls / totalBalls) * 1000) / 10;
+  }
+
+  if (
+    !summed4s6sFromRows &&
+    filteredStats.runs > 0 &&
+    playerStats.runs > 0 &&
+    playerStats['4s'] !== undefined
+  ) {
     const runsRatio = filteredStats.runs / playerStats.runs;
     filteredStats['4s'] = Math.round((playerStats['4s'] || 0) * runsRatio);
     filteredStats['6s'] = Math.round((playerStats['6s'] || 0) * runsRatio);
-  } else if (filteredStats.balls > 0 && playerStats.balls > 0 && playerStats['4s'] !== undefined) {
+  } else if (
+    !summed4s6sFromRows &&
+    filteredStats.balls > 0 &&
+    playerStats.balls > 0 &&
+    playerStats['4s'] !== undefined
+  ) {
     const ballsRatio = filteredStats.balls / playerStats.balls;
     filteredStats['4s'] = Math.round((playerStats['4s'] || 0) * ballsRatio);
     filteredStats['6s'] = Math.round((playerStats['6s'] || 0) * ballsRatio);
   }
-  
-  // Calculate proportion of filtered balls for bowling dot_balls
-  const totalBalls = filteredStats._totalBalls || 0;
-  if (totalBalls > 0 && playerStats.bowl_total_balls > 0 && playerStats.dot_balls !== undefined) {
-    const ballsRatio = totalBalls / playerStats.bowl_total_balls;
+
+  const tb = filteredStats._totalBalls || 0;
+  if (
+    !summedDotsFromRows &&
+    tb > 0 &&
+    playerStats.bowl_total_balls > 0 &&
+    playerStats.dot_balls !== undefined
+  ) {
+    const ballsRatio = tb / playerStats.bowl_total_balls;
     filteredStats.dot_balls = Math.round((playerStats.dot_balls || 0) * ballsRatio);
-    filteredStats.dot_balls = Math.min(filteredStats.dot_balls, totalBalls);
-    
-    if (totalBalls > 0) {
-      filteredStats.bowl_dot_pct = Math.round((filteredStats.dot_balls / totalBalls) * 1000) / 10;
-    } else {
-      filteredStats.bowl_dot_pct = 0;
-    }
-  } else if (totalBalls > 0 && playerStats.overs > 0 && playerStats.dot_balls !== undefined) {
+    filteredStats.dot_balls = Math.min(filteredStats.dot_balls, tb);
+    filteredStats.bowl_dot_pct =
+      tb > 0 ? Math.round((filteredStats.dot_balls / tb) * 1000) / 10 : 0;
+  } else if (
+    !summedDotsFromRows &&
+    tb > 0 &&
+    playerStats.overs > 0 &&
+    playerStats.dot_balls !== undefined
+  ) {
     const oversRatio = filteredStats.overs / playerStats.overs;
     filteredStats.dot_balls = Math.round((playerStats.dot_balls || 0) * oversRatio);
-    filteredStats.dot_balls = Math.min(filteredStats.dot_balls, totalBalls);
-    
-    if (totalBalls > 0) {
-      filteredStats.bowl_dot_pct = Math.round((filteredStats.dot_balls / totalBalls) * 1000) / 10;
-    } else {
-      filteredStats.bowl_dot_pct = 0;
-    }
+    filteredStats.dot_balls = Math.min(filteredStats.dot_balls, tb);
+    filteredStats.bowl_dot_pct =
+      tb > 0 ? Math.round((filteredStats.dot_balls / tb) * 1000) / 10 : 0;
   }
-  
-  // Clean up temporary field
+
   delete filteredStats._totalBalls;
-  
+
   return filteredStats;
+}
+
+function escapeHtmlCell(s) {
+  if (s == null || s === '') return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function formatMatchResultCell(m) {
+  const r = m.result || '-';
+  const d = m.result_detail;
+  const main = escapeHtmlCell(r);
+  if (!d) return main;
+  return `${main} <span class="result-detail" aria-label="${escapeHtmlCell(d)}">${escapeHtmlCell(d)}</span>`;
 }
 
 function renderHome() {
   try {
-    // Last 5 results
+    // Recent match results (see HOME_RECENT_RESULTS_LIMIT)
     const tbody = document.querySelector('#last5Results tbody');
     if (!tbody) return;
     
@@ -1385,9 +1671,9 @@ function renderHome() {
         if (!b.match_date) return -1;
         return b.match_date.localeCompare(a.match_date);
       });
-      tbody.innerHTML = sortedResults.slice(0, 5).map(m => {
+      tbody.innerHTML = sortedResults.slice(0, HOME_RECENT_RESULTS_LIMIT).map(m => {
         const normalizedSeries = m.series ? normalizeSeriesName(m.series) : '-';
-        return `<tr><td>${formatHumanDate(m.match_date)}</td><td>${m.opponent || '-'}</td><td>${m.result || '-'}</td><td>${formatMatchType(m.match_type)}</td><td>${m.ground || '-'}</td><td>${normalizedSeries}</td></tr>`;
+        return `<tr><td>${formatHumanDate(m.match_date)}</td><td>${escapeHtmlCell(m.opponent || '-')}</td><td>${formatMatchResultCell(m)}</td><td>${formatMatchType(m.match_type)}</td><td>${escapeHtmlCell(m.ground || '-')}</td><td>${normalizedSeries}</td></tr>`;
       }).join('');
     }
     
@@ -1541,16 +1827,130 @@ function renderHome() {
   }
 }
 
+/** Same exclusions as analyze.NON_PLAYED_RESULT_DETAILS for W/L aggregates. */
+const NON_PLAYED_RESULT_DETAILS_AGG = new Set(['Forfeit', 'Abandoned', 'No result']);
+
+function matchCountsTowardRecordStatsAgg(m) {
+  const rd = m && m.result_detail;
+  if (rd == null || rd === '') return true;
+  return !NON_PLAYED_RESULT_DETAILS_AGG.has(String(rd).trim());
+}
+
+/**
+ * Rebuild win_rate_by_ground / toss / match_type from match_results (aligned with analyze.build_team_analytics).
+ */
+function buildTeamAnalyticsFromMatches(matches) {
+  const rows = (matches || []).filter(matchCountsTowardRecordStatsAgg);
+  const out = {
+    overall_win_pct: 0,
+    win_rate_by_ground: {},
+    win_rate_by_toss: {},
+    win_rate_by_match_type: {},
+  };
+  if (rows.length === 0) return out;
+
+  let wins = 0;
+  let losses = 0;
+  let draws = 0;
+  for (const m of rows) {
+    const r = m.result;
+    if (r === 'Win') wins += 1;
+    else if (r === 'Loss') losses += 1;
+    else if (r === 'Draw' || r === 'Tie') draws += 1;
+  }
+  const totalM = wins + losses + draws;
+  if (totalM > 0) {
+    out.overall_win_pct = Math.round((wins / totalM) * 1000) / 10;
+  }
+
+  const groundStats = {};
+  for (const m of rows) {
+    const ground = m.ground;
+    const result = m.result;
+    if (!ground) continue;
+    if (!groundStats[ground]) groundStats[ground] = { wins: 0, losses: 0, draws: 0 };
+    if (result === 'Win') groundStats[ground].wins += 1;
+    else if (result === 'Loss') groundStats[ground].losses += 1;
+    else if (result === 'Draw' || result === 'Tie') groundStats[ground].draws += 1;
+  }
+  for (const [g, stats] of Object.entries(groundStats)) {
+    const t = stats.wins + stats.losses + stats.draws;
+    if (t > 0) {
+      out.win_rate_by_ground[g] = {
+        win_pct: Math.round((stats.wins / t) * 1000) / 10,
+        wins: stats.wins,
+        losses: stats.losses,
+        draws: stats.draws,
+        total: t,
+      };
+    }
+  }
+
+  const tossStats = {};
+  for (const m of rows) {
+    const tossDecision = m.toss_decision;
+    const result = m.result;
+    if (!tossDecision) continue;
+    if (!tossStats[tossDecision]) tossStats[tossDecision] = { wins: 0, losses: 0, draws: 0 };
+    if (result === 'Win') tossStats[tossDecision].wins += 1;
+    else if (result === 'Loss') tossStats[tossDecision].losses += 1;
+    else if (result === 'Draw' || result === 'Tie') tossStats[tossDecision].draws += 1;
+  }
+  for (const [tKey, stats] of Object.entries(tossStats)) {
+    const t = stats.wins + stats.losses + stats.draws;
+    if (t > 0) {
+      out.win_rate_by_toss[tKey] = {
+        win_pct: Math.round((stats.wins / t) * 1000) / 10,
+        wins: stats.wins,
+        losses: stats.losses,
+        draws: stats.draws,
+        total: t,
+      };
+    }
+  }
+
+  const matchTypeStats = {
+    League: { wins: 0, losses: 0, draws: 0 },
+    Playoff: { wins: 0, losses: 0, draws: 0 },
+  };
+  const playoffRe = /(quarter|semi|final|eliminator|playoff)/i;
+  for (const m of rows) {
+    const mt = m.match_type || '';
+    const bucket = playoffRe.test(String(mt)) ? 'Playoff' : 'League';
+    const result = m.result;
+    if (result === 'Win') matchTypeStats[bucket].wins += 1;
+    else if (result === 'Loss') matchTypeStats[bucket].losses += 1;
+    else if (result === 'Draw' || result === 'Tie') matchTypeStats[bucket].draws += 1;
+  }
+  for (const [mt, stats] of Object.entries(matchTypeStats)) {
+    const t = stats.wins + stats.losses + stats.draws;
+    if (t > 0) {
+      out.win_rate_by_match_type[mt] = {
+        win_pct: Math.round((stats.wins / t) * 1000) / 10,
+        wins: stats.wins,
+        losses: stats.losses,
+        draws: stats.draws,
+        total: t,
+      };
+    }
+  }
+
+  return out;
+}
+
 function renderTeamStats() {
   try {
-    const ta = filteredData.teamAnalytics || allData.teamAnalytics || {};
-    const winPctElem = document.getElementById('winPct');
-    if (winPctElem) {
-      winPctElem.textContent = ta.overall_win_pct ? `${ta.overall_win_pct}%` : '-';
-    }
-    
-    // Render win rate chart
-    renderWinRateChart();
+    const serverTa = filteredData.teamAnalytics || allData.teamAnalytics || {};
+    const filteredMr = filteredData.matchResults || allData.matchResults || [];
+    const computed = buildTeamAnalyticsFromMatches(filteredMr);
+    const ta = {
+      ...serverTa,
+      win_rate_by_ground: computed.win_rate_by_ground,
+      win_rate_by_toss: computed.win_rate_by_toss,
+      win_rate_by_match_type: computed.win_rate_by_match_type,
+    };
+
+    renderFormMomentum();
     
     const groundTbody = document.querySelector('#winByGround tbody');
     if (groundTbody) {
@@ -1598,6 +1998,9 @@ function renderPlayer(name) {
   const photos = allData.photos || {};
   const ps = stats[name];
   if (!ps) return;
+
+  const validKeys = filteredData.validMatchKeys;
+  const psDisplay = derivePlayerStatsForFilter(ps, validKeys);
   
   function fmt(v) { return (v === null || v === undefined) ? '-' : v; }
   
@@ -1608,26 +2011,26 @@ function renderPlayer(name) {
   }
   
   document.getElementById('pi_name').textContent = name;
-  document.getElementById('pi_runs').textContent = fmt(ps.runs);
-  document.getElementById('pi_sr').textContent = fmt(ps.sr);
-  document.getElementById('pi_avg').textContent = fmt(ps.avg);
+  document.getElementById('pi_runs').textContent = fmt(psDisplay.runs);
+  document.getElementById('pi_sr').textContent = fmt(psDisplay.sr);
+  document.getElementById('pi_avg').textContent = fmt(psDisplay.avg);
   
   let batDotPct = null;
-  if (ps.bat_dot_pct !== undefined) {
-    batDotPct = ps.bat_dot_pct;
-  } else if (ps.bat_tracked_balls !== undefined && ps.bat_tracked_balls > 0) {
-    batDotPct = ((ps.bat_dot_balls || 0) / ps.bat_tracked_balls) * 100;
+  if (psDisplay.bat_dot_pct !== undefined) {
+    batDotPct = psDisplay.bat_dot_pct;
+  } else if (psDisplay.bat_tracked_balls !== undefined && psDisplay.bat_tracked_balls > 0) {
+    batDotPct = ((psDisplay.bat_dot_balls || 0) / psDisplay.bat_tracked_balls) * 100;
   }
   document.getElementById('pi_bat_dot').textContent = batDotPct !== null && batDotPct !== undefined ? fmt(batDotPct.toFixed(1)) : '-';
   
-  document.getElementById('pi_4s').textContent = fmt(ps['4s']);
-  document.getElementById('pi_6s').textContent = fmt(ps['6s']);
-  document.getElementById('pi_wk').textContent = fmt(ps.wickets);
-  document.getElementById('pi_overs').textContent = fmt(ps.overs?.toFixed ? ps.overs.toFixed(1) : fmt(ps.overs));
-  document.getElementById('pi_econ').textContent = fmt(ps.econ);
+  document.getElementById('pi_4s').textContent = fmt(psDisplay['4s']);
+  document.getElementById('pi_6s').textContent = fmt(psDisplay['6s']);
+  document.getElementById('pi_wk').textContent = fmt(psDisplay.wickets);
+  document.getElementById('pi_overs').textContent = fmt(psDisplay.overs?.toFixed ? psDisplay.overs.toFixed(1) : fmt(psDisplay.overs));
+  document.getElementById('pi_econ').textContent = fmt(psDisplay.econ);
   
-  const bowlDotPct = ps.bowl_dot_pct !== undefined ? ps.bowl_dot_pct :
-                     (ps.overs > 0 && ps.dot_balls !== undefined ? ((ps.dot_balls || 0) / ((ps.overs || 0) * 6) * 100) : null);
+  const bowlDotPct = psDisplay.bowl_dot_pct !== undefined ? psDisplay.bowl_dot_pct :
+                     (psDisplay.overs > 0 && psDisplay.dot_balls !== undefined ? ((psDisplay.dot_balls || 0) / ((psDisplay.overs || 0) * 6) * 100) : null);
   document.getElementById('pi_bowl_dot').textContent = bowlDotPct !== null ? fmt(bowlDotPct.toFixed(1)) : '-';
   
   const url = photos[name] || 'https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png';
@@ -1652,8 +2055,8 @@ function renderPlayer(name) {
       }
     }
     
-    if (ps.position_stats) {
-      posTbody.innerHTML = Object.entries(ps.position_stats).sort((a, b) => parseInt(a[0]) - parseInt(b[0])).map(([pos, pstat]) =>
+    if (psDisplay.position_stats && Object.keys(psDisplay.position_stats).length > 0) {
+      posTbody.innerHTML = Object.entries(psDisplay.position_stats).sort((a, b) => parseInt(a[0]) - parseInt(b[0])).map(([pos, pstat]) =>
         `<tr><td>${pos}</td><td>${pstat.innings || 0}</td><td>${pstat.runs}</td><td>${pstat.balls}</td><td>${pstat.sr}</td><td>${pstat.avg}</td><td>${pstat.outs}</td></tr>`
       ).join('');
     } else {
@@ -1667,8 +2070,8 @@ function renderPlayer(name) {
   // Dismissal stats
   const dismissalStatsElem = document.getElementById('dismissalStats');
   if (dismissalStatsElem) {
-    if (ps.dismissal_stats && Object.keys(ps.dismissal_stats).length > 0) {
-      const dismissalEntries = Object.entries(ps.dismissal_stats)
+    if (psDisplay.dismissal_stats && Object.keys(psDisplay.dismissal_stats).length > 0) {
+      const dismissalEntries = Object.entries(psDisplay.dismissal_stats)
         .filter(([type, data]) => data.count > 0)
         .sort((a, b) => b[1].pct - a[1].pct);
       
@@ -1696,7 +2099,7 @@ function renderPlayer(name) {
   // Recent performances
   const recentBatting = document.getElementById('recentBatting');
   if (recentBatting) {
-    recentBatting.innerHTML = (ps.recent_batting || []).map(r => {
+    recentBatting.innerHTML = (psDisplay.recent_batting || []).map(r => {
       const opponentText = r.opponent ? ` vs. ${r.opponent}` : '';
       return `<li><span>${r.runs} (${r.balls})${opponentText}</span><span>${formatHumanDate(r.date)}</span></li>`;
     }).join('') || '<li>No recent batting data</li>';
@@ -1704,7 +2107,7 @@ function renderPlayer(name) {
   
   const recentBowling = document.getElementById('recentBowling');
   if (recentBowling) {
-    recentBowling.innerHTML = (ps.recent_bowling || []).map(r => {
+    recentBowling.innerHTML = (psDisplay.recent_bowling || []).map(r => {
       const opponentText = r.opponent ? ` vs. ${r.opponent}` : '';
       return `<li><span>${r.wickets}/${r.runs} (${r.overs}ov)${opponentText}</span><span>${formatHumanDate(r.date)}</span></li>`;
     }).join('') || '<li>No recent bowling data</li>';
@@ -1713,7 +2116,7 @@ function renderPlayer(name) {
   // PoM history
   const pomHistory = document.getElementById('pomHistory');
   if (pomHistory) {
-    pomHistory.innerHTML = (ps.pom_matches || []).map(m =>
+    pomHistory.innerHTML = (psDisplay.pom_matches || []).map(m =>
       `<li><span>${formatHumanDate(m.date)} vs ${m.opponent || ''}</span></li>`
     ).join('') || '<li>No Man of the Match awards</li>';
   }
@@ -1733,8 +2136,8 @@ function renderPlayer(name) {
       }
     }
     
-    if (ps.ground_stats) {
-      groundTbody.innerHTML = Object.entries(ps.ground_stats).map(([ground, gstat]) =>
+    if (psDisplay.ground_stats && Object.keys(psDisplay.ground_stats).length > 0) {
+      groundTbody.innerHTML = Object.entries(psDisplay.ground_stats).map(([ground, gstat]) =>
         `<tr><td>${ground}</td><td>${gstat.innings}</td><td>${gstat.runs}</td><td>${gstat.balls}</td><td>${gstat.sr}</td><td>${gstat.avg}</td></tr>`
       ).join('');
     } else {
@@ -1760,8 +2163,8 @@ function renderPlayer(name) {
       }
     }
     
-    if (ps.bowl_ground_stats) {
-      bowlGroundTbody.innerHTML = Object.entries(ps.bowl_ground_stats).map(([ground, gstat]) => {
+    if (psDisplay.bowl_ground_stats && Object.keys(psDisplay.bowl_ground_stats).length > 0) {
+      bowlGroundTbody.innerHTML = Object.entries(psDisplay.bowl_ground_stats).map(([ground, gstat]) => {
         const overs = gstat.overs?.toFixed ? gstat.overs.toFixed(1) : fmt(gstat.overs);
         const dotPct = gstat.dot_pct !== undefined ? gstat.dot_pct.toFixed(1) : '-';
         const econ = gstat.econ !== undefined ? gstat.econ.toFixed(2) : '-';
@@ -1775,8 +2178,8 @@ function renderPlayer(name) {
     convertTableToCards('bowlGroundStats');
   }
   
-  // Render performance charts
-  renderPlayerPerformanceCharts(name);
+  // Render performance charts (use filtered-derived stats when filters active)
+  renderPlayerPerformanceCharts(name, psDisplay);
 }
 
 let playerSelectListener = null;
@@ -1798,6 +2201,9 @@ function loadPlayerData() {
     sel.removeEventListener('change', playerSelectListener);
   }
   
+  // Keep the current player when filters change (loadPlayerData runs from applyFilters).
+  const previousValue = sel.value;
+  
   // Clear and repopulate dropdown
   sel.innerHTML = players.map(p => `<option value="${p}">${p}</option>`).join('');
   
@@ -1808,131 +2214,231 @@ function loadPlayerData() {
   sel.addEventListener('change', playerSelectListener);
   
   if (players.length) {
-    sel.value = players[0];
-    renderPlayer(players[0]);
+    const chosen =
+      previousValue && players.includes(previousValue) ? previousValue : players[0];
+    sel.value = chosen;
+    renderPlayer(chosen);
   }
 }
 
+/** Rows shown on the home "Recent match results" table (not the "Last 5" filter preset). */
+const HOME_RECENT_RESULTS_LIMIT = 5;
+
 // Chart instances
-let winRateChartInstance = null;
 let battingTrendChartInstance = null;
 let bowlingTrendChartInstance = null;
 
-// Win Rate Over Time Chart
-function renderWinRateChart() {
-  const canvas = document.getElementById('winRateChart');
-  if (!canvas) return;
-  
-  const results = filteredData.matchResults || [];
-  if (results.length === 0) {
-    if (winRateChartInstance) {
-      winRateChartInstance.destroy();
-      winRateChartInstance = null;
-    }
-    canvas.parentElement.innerHTML = '<p style="text-align:center; color:#64748B; padding:40px;">No match data available for chart.</p>';
-    return;
-  }
-  
-  // Group matches by month
-  const matchesByMonth = {};
-  results.forEach(match => {
-    if (!match.match_date) return;
-    const date = new Date(match.match_date + 'T00:00:00');
-    const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    if (!matchesByMonth[monthKey]) {
-      matchesByMonth[monthKey] = { wins: 0, losses: 0, draws: 0, total: 0 };
-    }
-    matchesByMonth[monthKey].total++;
-    if (match.result === 'Win') matchesByMonth[monthKey].wins++;
-    else if (match.result === 'Loss') matchesByMonth[monthKey].losses++;
-    else if (match.result === 'Draw') matchesByMonth[monthKey].draws++;
-  });
-  
-  // Sort by date
-  const sortedMonths = Object.keys(matchesByMonth).sort();
-  const labels = sortedMonths.map(month => {
-    const [year, monthNum] = month.split('-');
-    const date = new Date(parseInt(year), parseInt(monthNum) - 1);
-    return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-  });
-  
-  const winRates = sortedMonths.map(month => {
-    const data = matchesByMonth[month];
-    return data.total > 0 ? ((data.wins / data.total) * 100).toFixed(1) : 0;
-  });
-  
-  const ctx = canvas.getContext('2d');
-  
-  // Destroy existing chart if it exists
-  if (winRateChartInstance) {
-    winRateChartInstance.destroy();
-  }
-  
-  winRateChartInstance = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Win Rate %',
-        data: winRates,
-        borderColor: 'rgb(139, 92, 246)',
-        backgroundColor: 'rgba(139, 92, 246, 0.1)',
-        tension: 0.4,
-        fill: true,
-        pointRadius: 4,
-        pointHoverRadius: 6,
-        pointBackgroundColor: 'rgb(139, 92, 246)',
-        pointBorderColor: '#fff',
-        pointBorderWidth: 2
-      }]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      plugins: {
-        legend: {
-          display: true,
-          position: 'top'
-        },
-        tooltip: {
-          mode: 'index',
-          intersect: false
-        }
-      },
-      scales: {
-        y: {
-          beginAtZero: true,
-          max: 100,
-          ticks: {
-            callback: function(value) {
-              return value + '%';
-            }
-          },
-          title: {
-            display: true,
-            text: 'Win Rate (%)'
-          }
-        },
-        x: {
-          title: {
-            display: true,
-            text: 'Month'
-          }
-        }
-      },
-      interaction: {
-        mode: 'nearest',
-        axis: 'x',
-        intersect: false
-      }
-    }
-  });
+/** Max matches in the form strip; rolling win % and momentum use the same window. */
+const FORM_MOMENTUM_WINDOW = 10;
+
+function matchDateMs(m) {
+  if (!m || !m.match_date) return null;
+  const t = new Date(String(m.match_date) + 'T00:00:00').getTime();
+  return Number.isNaN(t) ? null : t;
 }
 
-// Player Performance Trends Charts
-function renderPlayerPerformanceCharts(playerName) {
+function isDecidedResult(r) {
+  return r === 'Win' || r === 'Loss' || r === 'Draw' || r === 'Tie';
+}
+
+function sortMatchesChronologically(matches) {
+  const arr = (matches || []).filter(m => m && isDecidedResult(m.result));
+  arr.sort((a, b) => {
+    const ta = matchDateMs(a);
+    const tb = matchDateMs(b);
+    if (ta != null && tb != null && ta !== tb) return ta - tb;
+    if (ta == null && tb == null) return (a.match_id || 0) - (b.match_id || 0);
+    if (ta == null) return 1;
+    if (tb == null) return -1;
+    const ida = a.match_id || 0;
+    const idb = b.match_id || 0;
+    if (ida !== idb) return ida - idb;
+    return 0;
+  });
+  return arr;
+}
+
+function computeFormMomentum(matches, windowSize) {
+  const sorted = sortMatchesChronologically(matches);
+  const n = Math.min(windowSize, sorted.length);
+  const window = n ? sorted.slice(-n) : [];
+  const prior = sorted.length > n ? sorted.slice(-2 * n, -n) : [];
+
+  let wins = 0;
+  let losses = 0;
+  let draws = 0;
+  for (const m of window) {
+    if (m.result === 'Win') wins++;
+    else if (m.result === 'Loss') losses++;
+    else draws++;
+  }
+  const total = window.length;
+  const winPct = total ? Math.round((wins / total) * 1000) / 10 : 0;
+
+  let priorWinPct = null;
+  if (prior.length) {
+    let pw = 0;
+    for (const m of prior) {
+      if (m.result === 'Win') pw++;
+    }
+    priorWinPct = Math.round((pw / prior.length) * 1000) / 10;
+  }
+
+  let streakLabel = '';
+  if (window.length) {
+    const last = window[window.length - 1];
+    const r = last.result;
+    let count = 0;
+    for (let i = window.length - 1; i >= 0; i--) {
+      if (window[i].result === r) count++;
+      else break;
+    }
+    if (r === 'Win') streakLabel = `W${count}`;
+    else if (r === 'Loss') streakLabel = `L${count}`;
+    else streakLabel = `D${count}`;
+  }
+
+  let trendClass = 'form-momentum-trend--flat';
+  let trendSymbol = '→';
+  let trendDiffText = '';
+  if (priorWinPct !== null) {
+    const diff = winPct - priorWinPct;
+    if (diff > 3) {
+      trendClass = 'form-momentum-trend--up';
+      trendSymbol = '↑';
+    } else if (diff < -3) {
+      trendClass = 'form-momentum-trend--down';
+      trendSymbol = '↓';
+    }
+    const sign = diff > 0 ? '+' : '';
+    trendDiffText = `${sign}${diff.toFixed(1)} pts vs prior ${prior.length}`;
+  }
+
+  return {
+    window,
+    priorLen: prior.length,
+    wins,
+    losses,
+    draws,
+    winPct,
+    priorWinPct,
+    streakLabel,
+    trendClass,
+    trendSymbol,
+    trendDiffText,
+    totalWithResult: sorted.length
+  };
+}
+
+function formatFormDate(d) {
+  if (!d) return '';
+  try {
+    const x = new Date(String(d) + 'T00:00:00');
+    return x.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch (e) {
+    return String(d);
+  }
+}
+
+function escapeFormAttr(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function renderFormMomentum() {
+  const section = document.getElementById('formMomentumSection');
+  if (!section) return;
+
+  const results = filteredData.matchResults || [];
+  const fm = computeFormMomentum(results, FORM_MOMENTUM_WINDOW);
+
+  if (fm.window.length === 0) {
+    section.innerHTML = '<p style="text-align:center; color:#64748B; padding:24px;">No match results with Win/Loss/Draw in the current filters.</p>';
+    return;
+  }
+
+  const oppLabel = (m) => {
+    const o = m.opponent && String(m.opponent).trim();
+    return o || 'opponent';
+  };
+
+  const pills = fm.window.map((m) => {
+    let label = '?';
+    let cls = 'form-pill--draw';
+    const forfeit = String(m.result_detail || '').trim() === 'Forfeit';
+    if (m.result === 'Win') {
+      label = forfeit ? 'W(F)' : 'W';
+      cls = 'form-pill--win';
+    } else if (m.result === 'Loss') {
+      label = forfeit ? 'L(F)' : 'L';
+      cls = 'form-pill--loss';
+    } else if (m.result === 'Draw' || m.result === 'Tie') {
+      label = m.result === 'Tie' ? 'T' : 'D';
+      cls = 'form-pill--draw';
+    }
+    const resultPhrase =
+      forfeit && (m.result === 'Win' || m.result === 'Loss')
+        ? `${m.result} (forfeit)`
+        : m.result;
+    const title = `${resultPhrase} vs ${oppLabel(m)} — ${formatFormDate(m.match_date)}`;
+    const safeTitle = escapeFormAttr(title);
+    return `<span class="form-pill ${cls}" title="${safeTitle}" aria-label="${safeTitle}">${escapeFormAttr(label)}</span>`;
+  }).join('');
+
+  const record = `${fm.wins}W-${fm.losses}L${fm.draws ? `-${fm.draws}D` : ''}`;
+  let metricsInner = `<span class="form-momentum-trend ${fm.trendClass}">${fm.winPct}% in last ${fm.window.length} (${record})</span>`;
+  metricsInner += ` · Streak <strong>${escapeFormAttr(fm.streakLabel)}</strong>`;
+  if (fm.priorWinPct !== null) {
+    metricsInner += ` · Prior ${fm.priorLen}: ${fm.priorWinPct}% <span class="form-momentum-trend ${fm.trendClass}">${fm.trendSymbol} ${escapeFormAttr(fm.trendDiffText)}</span>`;
+  }
+
+  section.innerHTML = `
+    <div class="form-momentum-metrics">${metricsInner}</div>
+    <div class="form-strip">${pills}</div>
+  `;
+}
+
+/** Short date for chart axis (e.g. "4 Apr") — keeps x labels readable. */
+function formatShortChartDate(dateString) {
+  if (!dateString || dateString === '-') return '';
+  try {
+    const date = new Date(dateString + 'T00:00:00');
+    if (isNaN(date.getTime())) return String(dateString).slice(5, 10);
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${date.getDate()} ${monthNames[date.getMonth()]}`;
+  } catch (e) {
+    return '';
+  }
+}
+
+function truncatePerformanceLabel(str, maxLen) {
+  const s = (str && String(str).trim()) || '';
+  if (!s || s === '-') return '';
+  if (s.length <= maxLen) return s;
+  return s.slice(0, Math.max(1, maxLen - 1)) + '…';
+}
+
+/** One line per inning: opponent (truncated) · short date */
+function performanceInningsLabel(opponent, dateString) {
+  const opp = truncatePerformanceLabel(opponent, 16);
+  const d = formatShortChartDate(dateString);
+  if (opp && d) return `${opp} · ${d}`;
+  if (opp) return opp;
+  if (d) return d;
+  return '—';
+}
+
+// Player Performance Trends Charts (discrete bar charts per innings / spell)
+function renderPlayerPerformanceCharts(playerName, statsOverride) {
   const stats = Object.keys(filteredData.stats || {}).length > 0 ? filteredData.stats : (allData.stats || {});
-  const ps = stats[playerName];
+  const ps =
+    statsOverride !== undefined && statsOverride !== null
+      ? statsOverride
+      : stats[playerName];
   if (!ps) {
     // Clear charts if no player data
     if (battingTrendChartInstance) {
@@ -2018,11 +2524,12 @@ function renderPlayerPerformanceCharts(playerName) {
   }
   
   // Batting Trend Chart
-  let battingCanvas = ensureCanvas('battingTrendChart', 'Batting performance trend over time', '.performance-charts-grid > .chart-container:first-child');
+  let battingCanvas = ensureCanvas('battingTrendChart', 'Batting runs in last five innings', '.performance-charts-grid > .chart-container:first-child');
   if (battingCanvas) {
     const recentBatting = ps.recent_batting || [];
-    const battingLabels = recentBatting.map(r => formatHumanDate(r.date)).reverse();
-    const battingRuns = recentBatting.map(r => r.runs || 0).reverse();
+    const battingChrono = [...recentBatting].reverse();
+    const battingLabels = battingChrono.map(r => performanceInningsLabel(r.opponent, r.date));
+    const battingRuns = battingChrono.map(r => r.runs || 0);
     
     // For mobile compatibility, always destroy and recreate chart
     // Update() method doesn't work reliably on mobile browsers
@@ -2045,21 +2552,17 @@ function renderPlayerPerformanceCharts(playerName) {
       
       const battingCtx = battingCanvas.getContext('2d');
       battingTrendChartInstance = new Chart(battingCtx, {
-        type: 'line',
+        type: 'bar',
         data: {
           labels: battingLabels,
           datasets: [{
-            label: 'Runs Scored',
+            label: 'Runs',
             data: battingRuns,
-            borderColor: 'rgb(16, 185, 129)',
-            backgroundColor: 'rgba(16, 185, 129, 0.1)',
-            tension: 0.4,
-            fill: true,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: 'rgb(16, 185, 129)',
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2
+            borderColor: 'rgb(5, 150, 105)',
+            backgroundColor: 'rgba(16, 185, 129, 0.75)',
+            borderWidth: 1,
+            borderRadius: 6,
+            maxBarThickness: 56
           }]
         },
         options: {
@@ -2067,21 +2570,38 @@ function renderPlayerPerformanceCharts(playerName) {
           maintainAspectRatio: false,
           plugins: {
             legend: {
-              display: true,
-              position: 'top'
+              display: false
             },
             title: {
               display: true,
-              text: 'Batting Performance',
+              text: 'Recent batting (last 5 innings)',
               font: {
                 size: 14,
                 weight: 'bold'
+              }
+            },
+            tooltip: {
+              callbacks: {
+                title(items) {
+                  const i = items[0].dataIndex;
+                  const r = battingChrono[i];
+                  const opp = (r && r.opponent && String(r.opponent).trim()) || '—';
+                  return `${formatHumanDate(r.date)} · ${opp}`;
+                },
+                label(ctx) {
+                  const r = battingChrono[ctx.dataIndex];
+                  const runs = r.runs || 0;
+                  const balls = r.balls || 0;
+                  const sr = balls > 0 ? ((runs / balls) * 100).toFixed(1) : '—';
+                  return [`Runs: ${runs}`, `Balls: ${balls}`, `SR: ${sr}`];
+                }
               }
             }
           },
           scales: {
             y: {
               beginAtZero: true,
+              ticks: { precision: 0 },
               title: {
                 display: true,
                 text: 'Runs'
@@ -2090,7 +2610,12 @@ function renderPlayerPerformanceCharts(playerName) {
             x: {
               title: {
                 display: true,
-                text: 'Date'
+                text: 'Innings (oldest → newest)'
+              },
+              ticks: {
+                maxRotation: 45,
+                minRotation: 0,
+                autoSkip: false
               }
             }
           }
@@ -2119,11 +2644,12 @@ function renderPlayerPerformanceCharts(playerName) {
   }
   
   // Bowling Trend Chart
-  let bowlingCanvas = ensureCanvas('bowlingTrendChart', 'Bowling performance trend over time', '.performance-charts-grid > .chart-container:last-child');
+  let bowlingCanvas = ensureCanvas('bowlingTrendChart', 'Bowling wickets in last five spells', '.performance-charts-grid > .chart-container:last-child');
   if (bowlingCanvas) {
     const recentBowling = ps.recent_bowling || [];
-    const bowlingLabels = recentBowling.map(r => formatHumanDate(r.date)).reverse();
-    const bowlingWickets = recentBowling.map(r => r.wickets || 0).reverse();
+    const bowlingChrono = [...recentBowling].reverse();
+    const bowlingLabels = bowlingChrono.map(r => performanceInningsLabel(r.opponent, r.date));
+    const bowlingWickets = bowlingChrono.map(r => r.wickets || 0);
     
     // For mobile compatibility, always destroy and recreate chart
     // Update() method doesn't work reliably on mobile browsers
@@ -2146,21 +2672,17 @@ function renderPlayerPerformanceCharts(playerName) {
       
       const bowlingCtx = bowlingCanvas.getContext('2d');
       bowlingTrendChartInstance = new Chart(bowlingCtx, {
-        type: 'line',
+        type: 'bar',
         data: {
           labels: bowlingLabels,
           datasets: [{
-            label: 'Wickets Taken',
+            label: 'Wickets',
             data: bowlingWickets,
-            borderColor: 'rgb(239, 68, 68)',
-            backgroundColor: 'rgba(239, 68, 68, 0.1)',
-            tension: 0.4,
-            fill: true,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            pointBackgroundColor: 'rgb(239, 68, 68)',
-            pointBorderColor: '#fff',
-            pointBorderWidth: 2
+            borderColor: 'rgb(185, 28, 28)',
+            backgroundColor: 'rgba(239, 68, 68, 0.75)',
+            borderWidth: 1,
+            borderRadius: 6,
+            maxBarThickness: 56
           }]
         },
         options: {
@@ -2168,15 +2690,31 @@ function renderPlayerPerformanceCharts(playerName) {
           maintainAspectRatio: false,
           plugins: {
             legend: {
-              display: true,
-              position: 'top'
+              display: false
             },
             title: {
               display: true,
-              text: 'Bowling Performance',
+              text: 'Recent bowling (last 5 spells)',
               font: {
                 size: 14,
                 weight: 'bold'
+              }
+            },
+            tooltip: {
+              callbacks: {
+                title(items) {
+                  const i = items[0].dataIndex;
+                  const r = bowlingChrono[i];
+                  const opp = (r && r.opponent && String(r.opponent).trim()) || '—';
+                  return `${formatHumanDate(r.date)} · ${opp}`;
+                },
+                label(ctx) {
+                  const r = bowlingChrono[ctx.dataIndex];
+                  const wk = r.wickets || 0;
+                  const runsConc = r.runs != null ? r.runs : '—';
+                  const overs = r.overs != null ? r.overs : '—';
+                  return [`Wickets: ${wk}`, `Runs conceded: ${runsConc}`, `Overs: ${overs}`];
+                }
               }
             }
           },
@@ -2184,7 +2722,8 @@ function renderPlayerPerformanceCharts(playerName) {
             y: {
               beginAtZero: true,
               ticks: {
-                stepSize: 1
+                stepSize: 1,
+                precision: 0
               },
               title: {
                 display: true,
@@ -2194,7 +2733,12 @@ function renderPlayerPerformanceCharts(playerName) {
             x: {
               title: {
                 display: true,
-                text: 'Date'
+                text: 'Spells (oldest → newest)'
+              },
+              ticks: {
+                maxRotation: 45,
+                minRotation: 0,
+                autoSkip: false
               }
             }
           }

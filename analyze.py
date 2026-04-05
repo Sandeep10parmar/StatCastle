@@ -332,12 +332,50 @@ def parse_match_metadata(full_html: str | None, info_html: str | None = None, te
     
     return meta
 
+def _visible_text_from_html(html: str | None) -> str:
+    if not html:
+        return ""
+    try:
+        return BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
+    except Exception:
+        return re.sub(r"<[^>]+>", " ", html)
+
+def combined_match_text(full_html: str | None, info_html: str | None) -> str:
+    """Plain text from scorecard + info pages for result parsing."""
+    parts = [_visible_text_from_html(full_html), _visible_text_from_html(info_html)]
+    return norm(" ".join(p for p in parts if p))
+
+def infer_opponent_from_vs(full_html: str | None, info_html: str | None, team_name: str) -> str | None:
+    """Infer opponent from 'Team A vs Team B' in page text (title, headers)."""
+    team_key = canonical_name(team_name)
+    blob = combined_match_text(full_html, info_html)
+    if not blob:
+        return None
+    patterns = [
+        r"League:\s*([A-Za-z0-9\s.]+?)\s+vs\s+([A-Za-z0-9\s.]+?)(?:\s*[-–]\s*|\s*\||\s*$)",
+        r"\b([A-Za-z][A-Za-z0-9\s]{2,34})\s+vs\s+([A-Za-z][A-Za-z0-9\s]{2,34})\b",
+    ]
+    for pat in patterns:
+        m = re.search(pat, blob, re.I)
+        if not m:
+            continue
+        a, b = norm(m.group(1)), norm(m.group(2))
+        ka, kb = canonical_name(a), canonical_name(b)
+        if not ka or not kb:
+            continue
+        if team_key in ka or ka in team_key:
+            return title_clean(b)
+        if team_key in kb or kb in team_key:
+            return title_clean(a)
+    return None
+
 def parse_match_result(full_html: str | None, team_name: str, tables_html: str | None = None, info_html: str | None = None) -> dict:
     """Parse match result (Win/Loss/Draw) and opponent from scorecard HTML."""
     result_info = {
         "match_result": None,  # Win, Loss, Draw, Tie
         "result_margin": None,  # e.g., "15 runs", "5 wickets"
-        "opponent_team": None
+        "opponent_team": None,
+        "result_detail": None,  # Abandoned, No result, Forfeit — for dashboard
     }
     
     if not full_html or not team_name:
@@ -363,36 +401,82 @@ def parse_match_result(full_html: str | None, team_name: str, tables_html: str |
     
     team_key = canonical_name(team_name)
     text = full_html
-    
-    for pattern in result_patterns:
-        matches = re.finditer(pattern, text, re.I)
-        for match in matches:
-            groups = match.groups()
-            if "tied" in match.group(0).lower() or "drawn" in match.group(0).lower() or "draw" in match.group(0).lower():
-                result_info["match_result"] = "Draw"
+    combined = combined_match_text(full_html, info_html)
+
+    def apply_forfeit_winner(winner_raw: str) -> None:
+        winner = norm(winner_raw)
+        winner_key = canonical_name(winner)
+        result_info["result_margin"] = "Forfeit"
+        result_info["result_detail"] = "Forfeit"
+        if winner_key and team_key:
+            if winner_key in team_key or team_key in winner_key:
+                result_info["match_result"] = "Win"
+            else:
+                result_info["match_result"] = "Loss"
+                if (winner_key not in INVALID_TEAM_NAMES and
+                    not re.search(r"won\s+the\s+toss|elected\s+to", winner, re.I) and
+                    not re.search(r"\d+\s*[,:]\s*\d+", winner)):
+                    result_info["opponent_team"] = title_clean(winner)
+
+    # Forfeit (CricClubs: "won by forfeit", "Forfeited. Winner: Team", etc.)
+    if combined:
+        fm = re.search(r"([A-Za-z0-9\s.'-]+?)\s+won\s+by\s+forfeit", combined, re.I)
+        if fm:
+            apply_forfeit_winner(fm.group(1))
+        if result_info["match_result"] is None:
+            fm2 = re.search(
+                r"forfeit(?:ed|ure)?\s*[.\s]*\s*Winner\s*:\s*([A-Za-z0-9\s.'-]+?)(?:\.|$|\n)",
+                combined,
+                re.I,
+            )
+            if fm2:
+                apply_forfeit_winner(fm2.group(1))
+
+    # Abandoned / no result (rain washout — both teams share points; treat as draw)
+    if result_info["match_result"] is None and combined and not re.search(r"forfeit", combined, re.I):
+        if re.search(r"\b(?:match\s+)?abandoned\b", combined, re.I):
+            result_info["match_result"] = "Draw"
+            result_info["result_margin"] = "Abandoned"
+            result_info["result_detail"] = "Abandoned"
+        elif re.search(r"\bno\s+result\b", combined, re.I):
+            result_info["match_result"] = "Draw"
+            result_info["result_margin"] = "No result"
+            result_info["result_detail"] = "No result"
+        elif re.search(r"\bN\s*/\s*R\b", combined, re.I):
+            result_info["match_result"] = "Draw"
+            result_info["result_margin"] = "No result"
+            result_info["result_detail"] = "No result"
+
+    if result_info["match_result"] is None:
+        for pattern in result_patterns:
+            matches = re.finditer(pattern, text, re.I)
+            for match in matches:
+                groups = match.groups()
+                if "tied" in match.group(0).lower() or "drawn" in match.group(0).lower() or "draw" in match.group(0).lower():
+                    result_info["match_result"] = "Draw"
+                    break
+
+                winner = norm(groups[0]) if groups else ""
+                winner_key = canonical_name(winner)
+
+                if len(groups) >= 3:
+                    margin_num = groups[1] if len(groups) > 1 else ""
+                    margin_type = groups[2] if len(groups) > 2 else ""
+                    result_info["result_margin"] = f"{margin_num} {margin_type}"
+
+                if winner_key and team_key:
+                    if winner_key in team_key or team_key in winner_key:
+                        result_info["match_result"] = "Win"
+                    else:
+                        result_info["match_result"] = "Loss"
+                        if (winner_key not in INVALID_TEAM_NAMES and
+                            not re.search(r"won\s+the\s+toss|elected\s+to", winner, re.I) and
+                            not re.search(r"\d+\s*[,:]\s*\d+", winner)):
+                            result_info["opponent_team"] = title_clean(winner)
                 break
-            
-            winner = norm(groups[0]) if groups else ""
-            winner_key = canonical_name(winner)
-            
-            if len(groups) >= 3:
-                margin_num = groups[1] if len(groups) > 1 else ""
-                margin_type = groups[2] if len(groups) > 2 else ""
-                result_info["result_margin"] = f"{margin_num} {margin_type}"
-            
-            if winner_key and team_key:
-                if winner_key in team_key or team_key in winner_key:
-                    result_info["match_result"] = "Win"
-                    # When team wins, don't set opponent from result text (will extract from tables)
-                else:
-                    result_info["match_result"] = "Loss"
-                    # Filter invalid team names and exclude toss/score text
-                    if (winner_key not in INVALID_TEAM_NAMES and
-                        not re.search(r"won\s+the\s+toss|elected\s+to", winner, re.I) and
-                        not re.search(r"\d+\s*[,:]\s*\d+", winner)):
-                        result_info["opponent_team"] = title_clean(winner)
+            if result_info["match_result"] is not None:
                 break
-    
+
     # Extract team names from table headers (batting/bowling tables)
     teams_from_tables = set()
     if tables_html:
@@ -468,7 +552,7 @@ def parse_match_result(full_html: str | None, team_name: str, tables_html: str |
     
     # If we didn't find opponent yet, try to extract from team names in the HTML
     # Always prioritize table headers as they're the most reliable source
-    if result_info["match_result"] in ("Win", "Loss"):
+    if result_info["match_result"] in ("Win", "Loss", "Draw"):
         # First try teams from table headers (most reliable source)
         # When team wins, opponent is the other team in the tables
         # When team loses, we may have opponent from result text, but table is more reliable
@@ -529,8 +613,35 @@ def parse_match_result(full_html: str | None, team_name: str, tables_html: str |
                     len(team_stripped) > 2 and len(team_stripped) < 40):
                     result_info["opponent_team"] = title_clean(team_stripped)
                     break
-    
+
+    if result_info["match_result"] and not result_info["opponent_team"]:
+        inferred = infer_opponent_from_vs(full_html, info_html, team_name)
+        if inferred:
+            result_info["opponent_team"] = inferred
+
     return result_info
+
+# Forfeits and abandoned / no-result games stay in match_results for the record but must not
+# affect overall W/L%, ground, toss, match-type splits, or player innings aggregates.
+NON_PLAYED_RESULT_DETAILS = frozenset({"Forfeit", "Abandoned", "No result"})
+
+
+def match_counts_toward_record_stats(m: dict) -> bool:
+    """True if this match should contribute to record-style team aggregates."""
+    rd = m.get("result_detail")
+    if rd is None or (isinstance(rd, float) and pd.isna(rd)):
+        return True
+    return str(rd).strip() not in NON_PLAYED_RESULT_DETAILS
+
+
+def exclude_non_played_match_rows(df: pd.DataFrame) -> pd.DataFrame:
+    """Drop rows from matches that were not played out (forfeit, abandoned, N/R)."""
+    if df.empty or "result_detail" not in df.columns:
+        return df
+    col = df["result_detail"]
+    mask = col.isna() | ~col.isin(NON_PLAYED_RESULT_DETAILS)
+    return df.loc[mask].copy()
+
 
 def parse_ball_by_ball(ball_html: str | None) -> dict:
     """Return mapping of batter name -> {'balls': int, 'dots': int}."""
@@ -715,7 +826,12 @@ def split_name_and_dismissal(text: str):
 def plausible_batting(runs, balls, sr, fours, sixes):
     ok_runs = (pd.isna(runs) or (0 <= runs <= 200))
     ok_balls = (pd.isna(balls) or (0 <= balls <= 120))
-    ok_sr = (pd.isna(sr) or (10 <= sr <= 400))
+    # Ducks (0 runs): SR 0.00 or missing, including 0(0) run-out without facing.
+    if ok_runs and ok_balls and pd.notna(runs) and runs == 0:
+        ok_sr = pd.isna(sr) or (0 <= sr <= 400)
+    else:
+        # Max SR 600 = all sixes (e.g. 6 off 1 not out); min 10 filters junk parses.
+        ok_sr = pd.isna(sr) or (10 <= sr <= 600)
     ok_46 = ((pd.isna(fours) or fours <= 30) and (pd.isna(sixes) or sixes <= 20))
     return ok_runs and ok_balls and ok_sr and ok_46
 
@@ -813,7 +929,7 @@ def parse_batting_row(cells, match_id, dot_lookup=None, meta=None, position=None
         for x in cells:
             try:
                 v = float(x)
-                if 20.0 <= v <= 400.0:
+                if 20.0 <= v <= 600.0:
                     sr = v; break
             except: pass
 
@@ -967,49 +1083,95 @@ def parse_bowling_row(cells, match_id):
         return None
     return rec
 
-def build_match_results(dfb: pd.DataFrame, dfw: pd.DataFrame, team_name: str) -> list:
-    """Generate match results summary for all matches."""
-    if dfb.empty:
-        return []
-    
-    # Get unique matches with metadata
-    match_data = []
-    for match_id in dfb["Match_Id"].dropna().unique():
-        match_rows = dfb[dfb["Match_Id"] == match_id]
-        if match_rows.empty:
+def _match_result_row_from_meta(
+    match_id: int | None,
+    match_meta: dict,
+) -> dict | None:
+    """Build one match_results.json object from parse metadata; None if no result."""
+    res = match_meta.get("match_result")
+    if not res:
+        return None
+    opp = match_meta.get("opponent_team")
+    return {
+        "match_id": int(match_id) if match_id is not None and pd.notna(match_id) else match_id,
+        "match_date": match_meta.get("match_date"),
+        "opponent": opp,
+        "result": res,
+        "result_detail": match_meta.get("result_detail"),
+        "ground": match_meta.get("ground"),
+        "series": match_meta.get("series"),
+        "toss_winner": match_meta.get("toss_winner"),
+        "toss_decision": match_meta.get("toss_decision"),
+        "player_of_match": match_meta.get("player_of_match"),
+        "match_type": match_meta.get("match_type"),
+    }
+
+def build_match_results(
+    dfb: pd.DataFrame,
+    dfw: pd.DataFrame,
+    team_name: str,
+    supplemental: list[dict] | None = None,
+) -> list:
+    """Generate match results summary for all matches; merge supplemental metadata-only rows."""
+    match_data: list[dict] = []
+    seen_ids: set[int] = set()
+
+    if not dfb.empty:
+        for match_id in dfb["Match_Id"].dropna().unique():
+            match_rows = dfb[dfb["Match_Id"] == match_id]
+            if match_rows.empty:
+                continue
+            first_row = match_rows.iloc[0]
+            mid = int(match_id) if pd.notna(match_id) else None
+            if mid is not None:
+                seen_ids.add(mid)
+            rd = first_row.get("result_detail")
+            if rd is None or (isinstance(rd, float) and pd.isna(rd)):
+                rd = None
+            match_data.append({
+                "match_id": mid,
+                "match_date": first_row.get("match_date"),
+                "opponent": first_row.get("opponent_team"),
+                "result": first_row.get("match_result"),
+                "result_detail": rd,
+                "ground": first_row.get("ground"),
+                "series": first_row.get("series"),
+                "toss_winner": first_row.get("toss_winner"),
+                "toss_decision": first_row.get("toss_decision"),
+                "player_of_match": first_row.get("player_of_match"),
+                "match_type": first_row.get("match_type"),
+            })
+
+    for row in supplemental or []:
+        mid = row.get("match_id")
+        try:
+            mid_int = int(mid) if mid is not None else None
+        except (TypeError, ValueError):
+            mid_int = None
+        if mid_int is not None and mid_int in seen_ids:
             continue
-        
-        first_row = match_rows.iloc[0]
-        match_data.append({
-            "match_id": int(match_id) if pd.notna(match_id) else None,
-            "match_date": first_row.get("match_date"),
-            "opponent": first_row.get("opponent_team"),
-            "result": first_row.get("match_result"),
-            "ground": first_row.get("ground"),
-            "series": first_row.get("series"),
-            "toss_winner": first_row.get("toss_winner"),
-            "toss_decision": first_row.get("toss_decision"),
-            "player_of_match": first_row.get("player_of_match"),
-            "match_type": first_row.get("match_type"),
-        })
-    
-    # Sort by date (most recent first), then by match_id as fallback
+        if mid_int is not None:
+            seen_ids.add(mid_int)
+        match_data.append(row)
+
     def sort_key(m):
         date = m.get("match_date")
         if date:
             try:
-                return datetime.strptime(date, "%Y-%m-%d")
-            except:
+                return datetime.strptime(str(date), "%Y-%m-%d")
+            except Exception:
                 pass
         return datetime.min
-    
+
     match_data.sort(key=sort_key, reverse=True)
-    
-    # Return all matches
     return match_data
 
 def build_team_analytics(dfb: pd.DataFrame, dfw: pd.DataFrame, match_results: list, team_name: str) -> dict:
-    """Generate team-level analytics including win rates."""
+    """Generate team-level analytics including win rates (from merged match_results).
+
+    Excludes Forfeit, Abandoned, and No result — those games are not treated as played for
+    W/L%, ground, toss, or league vs playoff splits.
+    """
     analytics = {
         "team_name": team_name,
         "overall_win_pct": 0.0,
@@ -1017,47 +1179,39 @@ def build_team_analytics(dfb: pd.DataFrame, dfw: pd.DataFrame, match_results: li
         "win_rate_by_toss": {},
         "win_rate_by_match_type": {},
     }
-    
-    if dfb.empty:
+    rows = [m for m in (match_results or []) if match_counts_toward_record_stats(m)]
+    if not rows:
         return analytics
-    
-    # Calculate overall win percentage
-    matches = dfb["Match_Id"].dropna().unique()
+
     wins = losses = draws = 0
-    for match_id in matches:
-        match_rows = dfb[dfb["Match_Id"] == match_id]
-        if match_rows.empty:
-            continue
-        result = match_rows.iloc[0].get("match_result")
+    for m in rows:
+        result = m.get("result")
         if result == "Win":
             wins += 1
         elif result == "Loss":
             losses += 1
-        elif result == "Draw":
+        elif result in ("Draw", "Tie"):
             draws += 1
-    
+
     total_matches = wins + losses + draws
     if total_matches > 0:
         analytics["overall_win_pct"] = round((wins / total_matches) * 100, 1)
-    
-    # Win rate by ground
-    ground_stats = {}
-    for match_id in matches:
-        match_rows = dfb[dfb["Match_Id"] == match_id]
-        if match_rows.empty:
+
+    ground_stats: dict[str, dict] = {}
+    for m in rows:
+        ground = m.get("ground")
+        result = m.get("result")
+        if not ground:
             continue
-        ground = match_rows.iloc[0].get("ground")
-        result = match_rows.iloc[0].get("match_result")
-        if ground:
-            if ground not in ground_stats:
-                ground_stats[ground] = {"wins": 0, "losses": 0, "draws": 0}
-            if result == "Win":
-                ground_stats[ground]["wins"] += 1
-            elif result == "Loss":
-                ground_stats[ground]["losses"] += 1
-            elif result == "Draw":
-                ground_stats[ground]["draws"] += 1
-    
+        if ground not in ground_stats:
+            ground_stats[ground] = {"wins": 0, "losses": 0, "draws": 0}
+        if result == "Win":
+            ground_stats[ground]["wins"] += 1
+        elif result == "Loss":
+            ground_stats[ground]["losses"] += 1
+        elif result in ("Draw", "Tie"):
+            ground_stats[ground]["draws"] += 1
+
     for ground, stats in ground_stats.items():
         total = stats["wins"] + stats["losses"] + stats["draws"]
         if total > 0:
@@ -1068,25 +1222,22 @@ def build_team_analytics(dfb: pd.DataFrame, dfw: pd.DataFrame, match_results: li
                 "draws": stats["draws"],
                 "total": total
             }
-    
-    # Win rate by toss decision
-    toss_stats = {}
-    for match_id in matches:
-        match_rows = dfb[dfb["Match_Id"] == match_id]
-        if match_rows.empty:
+
+    toss_stats: dict[str, dict] = {}
+    for m in rows:
+        toss_decision = m.get("toss_decision")
+        result = m.get("result")
+        if not toss_decision:
             continue
-        toss_decision = match_rows.iloc[0].get("toss_decision")
-        result = match_rows.iloc[0].get("match_result")
-        if toss_decision:
-            if toss_decision not in toss_stats:
-                toss_stats[toss_decision] = {"wins": 0, "losses": 0, "draws": 0}
-            if result == "Win":
-                toss_stats[toss_decision]["wins"] += 1
-            elif result == "Loss":
-                toss_stats[toss_decision]["losses"] += 1
-            elif result == "Draw":
-                toss_stats[toss_decision]["draws"] += 1
-    
+        if toss_decision not in toss_stats:
+            toss_stats[toss_decision] = {"wins": 0, "losses": 0, "draws": 0}
+        if result == "Win":
+            toss_stats[toss_decision]["wins"] += 1
+        elif result == "Loss":
+            toss_stats[toss_decision]["losses"] += 1
+        elif result in ("Draw", "Tie"):
+            toss_stats[toss_decision]["draws"] += 1
+
     for toss, stats in toss_stats.items():
         total = stats["wins"] + stats["losses"] + stats["draws"]
         if total > 0:
@@ -1097,23 +1248,20 @@ def build_team_analytics(dfb: pd.DataFrame, dfw: pd.DataFrame, match_results: li
                 "draws": stats["draws"],
                 "total": total
             }
-    
-    # Win rate by match type (League vs Playoff)
+
     match_type_stats = {"League": {"wins": 0, "losses": 0, "draws": 0}, "Playoff": {"wins": 0, "losses": 0, "draws": 0}}
-    for match_id in matches:
-        match_rows = dfb[dfb["Match_Id"] == match_id]
-        if match_rows.empty:
-            continue
-        is_playoff = match_rows.iloc[0].get("is_playoff", False)
-        result = match_rows.iloc[0].get("match_result")
-        match_type = "Playoff" if is_playoff else "League"
+    for m in rows:
+        mt = m.get("match_type") or ""
+        is_playoff = bool(re.search(r"(quarter|semi|final|eliminator|playoff)", str(mt), re.I))
+        match_type_bucket = "Playoff" if is_playoff else "League"
+        result = m.get("result")
         if result == "Win":
-            match_type_stats[match_type]["wins"] += 1
+            match_type_stats[match_type_bucket]["wins"] += 1
         elif result == "Loss":
-            match_type_stats[match_type]["losses"] += 1
-        elif result == "Draw":
-            match_type_stats[match_type]["draws"] += 1
-    
+            match_type_stats[match_type_bucket]["losses"] += 1
+        elif result in ("Draw", "Tie"):
+            match_type_stats[match_type_bucket]["draws"] += 1
+
     for match_type, stats in match_type_stats.items():
         total = stats["wins"] + stats["losses"] + stats["draws"]
         if total > 0:
@@ -1124,7 +1272,7 @@ def build_team_analytics(dfb: pd.DataFrame, dfw: pd.DataFrame, match_results: li
                 "draws": stats["draws"],
                 "total": total
             }
-    
+
     return analytics
 
 GROUND_NAME_ALIASES = {
@@ -1137,6 +1285,48 @@ def normalize_ground_name(ground: str | None) -> str | None:
         return ground
     g = norm(ground)
     return GROUND_NAME_ALIASES.get(g, g)
+
+
+def _match_date_json(val) -> str | None:
+    """Normalize match_date for JSON keys aligned with match_results / dashboard filters."""
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    if hasattr(val, "strftime"):
+        return val.strftime("%Y-%m-%d")
+    s = str(val).strip()
+    if len(s) >= 10 and s[4] == "-":
+        return s[:10]
+    return s or None
+
+
+def _opponent_json(val) -> str | None:
+    if val is None or (isinstance(val, float) and pd.isna(val)):
+        return None
+    t = str(val).strip()
+    return t or None
+
+
+def simplify_dismissal_type(dismissal_type: str) -> str:
+    """Bucket dismissal text for stats (matches dismissal_stats / dashboard)."""
+    dismissal_type = str(dismissal_type or "").strip().lower()
+    if not dismissal_type:
+        dismissal_type = "not out"
+    if dismissal_type in ("catch", "bowled", "not out", "run out", "lbw", "stumped"):
+        return dismissal_type
+    if dismissal_type.startswith("c"):
+        return "catch"
+    if dismissal_type.startswith("b"):
+        return "bowled"
+    if "not out" in dismissal_type:
+        return "not out"
+    if "run out" in dismissal_type:
+        return "run out"
+    if "lbw" in dismissal_type:
+        return "lbw"
+    if dismissal_type.startswith("st"):
+        return "stumped"
+    return "other"
+
 
 def normalize_series_name(series_name: str) -> str:
     """
@@ -1183,6 +1373,25 @@ def extract_series_list(dfb: pd.DataFrame) -> list:
     normalized = [normalize_series_name(s) for s in series if s]
     return sorted([s for s in normalized if s])
 
+
+def merge_series_list_for_dashboard(dfb_stats: pd.DataFrame, match_results: list) -> list:
+    """Union of series from played-match batting rows and every match_results row.
+
+    Metadata-only games (forfeit / abandoned) still carry series on the scorecard; including
+    them here keeps the dashboard series filter aligned with match_results so those matches
+    are not dropped when filters are applied.
+    """
+    names: set[str] = set(extract_series_list(dfb_stats))
+    for m in match_results or []:
+        s = m.get("series")
+        if s is None or (isinstance(s, float) and pd.isna(s)):
+            continue
+        t = str(s).strip()
+        if not t:
+            continue
+        names.add(normalize_series_name(t))
+    return sorted(n for n in names if n)
+
 def build_player_assets(dfb: pd.DataFrame, dfw: pd.DataFrame, roster_photos: dict[str, str]):
     assets = Path("team_dashboard/assets")
     assets.mkdir(parents=True, exist_ok=True)
@@ -1199,6 +1408,44 @@ def build_player_assets(dfb: pd.DataFrame, dfw: pd.DataFrame, roster_photos: dic
         bat_df["is_out"] = bat_df["Dismissal Type"].str.lower().apply(
             lambda x: 0 if (not x or "not out" in x) else 1
         )
+
+        batting_innings_by_name: dict[str, list[dict]] = {}
+        for _, row in bat_df.iterrows():
+            pname = row.get("Name")
+            if pd.isna(pname):
+                continue
+            pname = str(pname).strip()
+            if not pname:
+                continue
+            pos_i = None
+            pos_raw = row.get("Batting_Position")
+            if pd.notna(pos_raw):
+                try:
+                    pf = float(pos_raw)
+                    if pf > 0:
+                        pos_i = int(pf)
+                except (TypeError, ValueError):
+                    pass
+            g = row.get("ground")
+            g_str = None
+            if g is not None and not (isinstance(g, float) and pd.isna(g)):
+                g_str = str(g).strip() or None
+            dtyp = simplify_dismissal_type(str(row.get("Dismissal Type", "")))
+            rec = {
+                "date": _match_date_json(row.get("match_date")),
+                "opponent": _opponent_json(row.get("opponent_team")),
+                "runs": int(row.get("Runs", 0) or 0),
+                "balls": int(row.get("Balls", 0) or 0),
+                "4s": int(row.get("4s", 0) or 0),
+                "6s": int(row.get("6s", 0) or 0),
+                "position": pos_i,
+                "ground": g_str,
+                "dismissal": dtyp,
+                "is_out": int(row.get("is_out", 0) or 0),
+                "bat_dot_balls": int(row.get("bat_dot_balls", 0) or 0),
+                "bat_bbp_balls": int(row.get("bat_bbp_balls", 0) or 0),
+            }
+            batting_innings_by_name.setdefault(pname, []).append(rec)
 
         grouped = bat_df.groupby("Name", dropna=False).agg({
             "Runs":"sum",
@@ -1301,8 +1548,8 @@ def build_player_assets(dfb: pd.DataFrame, dfw: pd.DataFrame, roster_photos: dic
                         pom_matches[pom] = []
                     pom_matches[pom].append({
                         "match_id": int(match_id) if pd.notna(match_id) else None,
-                        "date": match_date,
-                        "opponent": opponent,
+                        "date": _match_date_json(match_date),
+                        "opponent": _opponent_json(opponent),
                     })
         
         # Dismissal type statistics
@@ -1313,28 +1560,7 @@ def build_player_assets(dfb: pd.DataFrame, dfw: pd.DataFrame, roster_photos: dic
             if total_innings > 0:
                 dismissal_counts = {}
                 for _, prow in player_rows.iterrows():
-                    dismissal_type = str(prow.get("Dismissal Type", "")).strip().lower()
-                    if not dismissal_type:
-                        dismissal_type = "not out"
-                    # Normalize dismissal type to match simplify_how_out output
-                    # Check if already simplified first
-                    if dismissal_type in ["catch", "bowled", "not out", "run out", "lbw", "stumped"]:
-                        pass  # Already simplified
-                    elif dismissal_type.startswith("c"):
-                        dismissal_type = "catch"
-                    elif dismissal_type.startswith("b"):
-                        dismissal_type = "bowled"
-                    elif "not out" in dismissal_type:
-                        dismissal_type = "not out"
-                    elif "run out" in dismissal_type:
-                        dismissal_type = "run out"
-                    elif "lbw" in dismissal_type:
-                        dismissal_type = "lbw"
-                    elif dismissal_type.startswith("st"):
-                        dismissal_type = "stumped"
-                    else:
-                        dismissal_type = "other"
-                    
+                    dismissal_type = simplify_dismissal_type(str(prow.get("Dismissal Type", "")))
                     dismissal_counts[dismissal_type] = dismissal_counts.get(dismissal_type, 0) + 1
                 
                 # Calculate percentages
@@ -1380,6 +1606,7 @@ def build_player_assets(dfb: pd.DataFrame, dfw: pd.DataFrame, roster_photos: dic
                 entry["pom_matches"] = pom_matches[name]
             if name in dismissal_stats:
                 entry["dismissal_stats"] = dismissal_stats[name]
+            entry["batting_innings"] = batting_innings_by_name.get(name, [])
 
     if not dfw.empty:
         bowl_df = dfw.copy()
@@ -1436,6 +1663,37 @@ def build_player_assets(dfb: pd.DataFrame, dfw: pd.DataFrame, roster_photos: dic
                         "econ": gecon,
                     }
         
+        bowling_spells_by_name: dict[str, list[dict]] = {}
+        if "match_id" in bowl_df.columns and not dfb.empty and "match_date" in dfb.columns:
+            _md_map = dfb[["Match_Id", "match_date"]].drop_duplicates().set_index("Match_Id")["match_date"].to_dict()
+            _bspell = bowl_df.copy()
+            _bspell["_spell_date"] = _bspell["match_id"].map(_md_map)
+        else:
+            _bspell = bowl_df.copy()
+            _bspell["_spell_date"] = None
+        for _, srow in _bspell.iterrows():
+            bname = srow.get("bowler")
+            if pd.isna(bname):
+                continue
+            bname = str(bname).strip()
+            if not bname:
+                continue
+            balls_sp = int(srow.get("balls_single", 0) or 0)
+            g = srow.get("ground")
+            g_str = None
+            if g is not None and not (isinstance(g, float) and pd.isna(g)):
+                g_str = str(g).strip() or None
+            bowling_spells_by_name.setdefault(bname, []).append({
+                "date": _match_date_json(srow.get("_spell_date")),
+                "opponent": _opponent_json(srow.get("opponent_team")),
+                "wickets": int(srow.get("w", 0) or 0),
+                "runs": int(srow.get("r", 0) or 0),
+                "overs": float(_overs_from_balls_fallback(balls_sp)),
+                "balls": balls_sp,
+                "dots": int(srow.get("dot", 0) or 0),
+                "ground": g_str,
+            })
+
         # Recent bowling performances (last 5 spells)
         recent_bowling = {}
         if "match_id" in bowl_df.columns and "match_date" in dfb.columns:
@@ -1479,6 +1737,7 @@ def build_player_assets(dfb: pd.DataFrame, dfw: pd.DataFrame, roster_photos: dic
                 entry["recent_bowling"] = recent_bowling[name]
             if name in bowl_ground_stats:
                 entry["bowl_ground_stats"] = bowl_ground_stats[name]
+            entry["bowling_spells"] = bowling_spells_by_name.get(name, [])
 
     stats_sorted = dict(sorted(stats.items()))
     (assets / "player_stats.json").write_text(json.dumps(stats_sorted, indent=2), encoding="utf-8")
@@ -1516,6 +1775,7 @@ def main():
     seen_matches = set()
     unknown_batters: set[str] = set()
     unknown_bowlers: set[str] = set()
+    supplemental_match_results: list[dict] = []
 
     for path in match_files:
         try:
@@ -1537,13 +1797,24 @@ def main():
             seen_matches.add(match_key)
 
             html_tables = match.get("tables_html") or match.get("html", "")
-            if not html_tables:
-                continue
             full_html = match.get("full_html") or match.get("page_html") or html_tables
             info_html = match.get("info_html")
+            if not full_html:
+                continue
+
             match_meta = parse_match_metadata(full_html, info_html, team_name_cfg)
-            match_result = parse_match_result(full_html, team_name_cfg, html_tables, info_html)
+            match_result = parse_match_result(
+                full_html, team_name_cfg, html_tables if html_tables else None, info_html
+            )
             match_meta.update(match_result)
+
+            if not html_tables:
+                extra = _match_result_row_from_meta(match_id, match_meta)
+                if extra:
+                    supplemental_match_results.append(extra)
+                continue
+
+            bats_before, bowls_before = len(bats), len(bowls)
             ball_html = match.get("ball_html")
             dots_raw = parse_ball_by_ball(ball_html)
             if ball_html and not dots_raw:
@@ -1592,6 +1863,7 @@ def main():
                         br["player_of_match"] = match_meta.get("player_of_match")
                         br["match_result"] = match_meta.get("match_result")
                         br["opponent_team"] = match_meta.get("opponent_team")
+                        br["result_detail"] = match_meta.get("result_detail")
                         bats.append({k: v for k, v in br.items() if k != "_score"})
                     else:
                         wr = parse_bowling_row(r, match_id)
@@ -1609,7 +1881,13 @@ def main():
                         wr["player_of_match"] = match_meta.get("player_of_match")
                         wr["match_result"] = match_meta.get("match_result")
                         wr["opponent_team"] = match_meta.get("opponent_team")
+                        wr["result_detail"] = match_meta.get("result_detail")
                         bowls.append({k: v for k, v in wr.items() if k != "_score"})
+
+            if len(bats) == bats_before and len(bowls) == bowls_before:
+                extra = _match_result_row_from_meta(match_id, match_meta)
+                if extra:
+                    supplemental_match_results.append(extra)
 
     if roster_map:
         if unknown_batters:
@@ -1624,6 +1902,7 @@ def main():
         "Name","Runs","Balls","4s","6s","SR","Dismissal Type",
         "Match_Id","Batting_Position","match_date","match_type","is_playoff",
         "series","ground","toss_winner","toss_decision","player_of_match","match_result","opponent_team",
+        "result_detail",
         "bat_dot_balls","bat_bbp_balls","bat_dot_pct"
     ]
     dfb = pd.DataFrame(bats)
@@ -1644,7 +1923,8 @@ def main():
     # Write bowling
     bowl_cols = [
         "bowler","o","m","dot","r","w","econ","Wd","Nb","match_id",
-        "series","ground","toss_winner","toss_decision","player_of_match","match_result","opponent_team"
+        "series","ground","toss_winner","toss_decision","player_of_match","match_result","opponent_team",
+        "result_detail",
     ]
     dfw = pd.DataFrame(bowls)
     for c in bowl_cols:
@@ -1653,8 +1933,11 @@ def main():
     dfw = dfw[bowl_cols]
     dfw.to_csv(assets / "_debug_bowling_rows.csv", index=False)
 
+    dfb_stats = exclude_non_played_match_rows(dfb)
+    dfw_stats = exclude_non_played_match_rows(dfw)
+
     # Build match results
-    match_results = build_match_results(dfb, dfw, team_name_cfg)
+    match_results = build_match_results(dfb, dfw, team_name_cfg, supplemental_match_results)
     (assets / "match_results.json").write_text(json.dumps(match_results, indent=2), encoding="utf-8")
     
     # Build team analytics
@@ -1662,7 +1945,7 @@ def main():
     (assets / "team_analytics.json").write_text(json.dumps(team_analytics, indent=2), encoding="utf-8")
     
     # Extract series list
-    series_list = extract_series_list(dfb)
+    series_list = merge_series_list_for_dashboard(dfb_stats, match_results)
     (assets / "series_list.json").write_text(json.dumps(series_list, indent=2), encoding="utf-8")
 
     # Copy players.csv to assets if it exists (for dashboard to load)
@@ -1675,7 +1958,7 @@ def main():
             shutil.copy2(players_csv_path, assets / "players.csv")
             print(f"[info] copied players.csv to assets/ for dashboard")
 
-    build_player_assets(dfb, dfw, roster_photos)
+    build_player_assets(dfb_stats, dfw_stats, roster_photos)
 
     print("[ok] wrote CSVs at team_dashboard/assets — please open them to verify.")
 
@@ -1748,9 +2031,7 @@ try:
                     dismissal = lower(
                         row.get("Dismissal Type") or row.get("how out") or row.get("Dismissal") or ""
                     )
-                    is_out = 0
-                    if dismissal and "not out" not in dismissal:
-                        is_out = 1 if (runs > 0 or balls > 0) else 0
+                    is_out = 0 if (not dismissal or "not out" in dismissal) else 1
 
                     if name not in bat_tot:
                         bat_tot[name] = {"Runs": 0, "Balls": 0, "4s": 0, "6s": 0, "Outs": 0}

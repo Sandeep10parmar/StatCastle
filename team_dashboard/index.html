@@ -118,7 +118,7 @@
 
 <!-- Home Page -->
 <main id="home" class="page active" role="tabpanel" aria-labelledby="home-tab">
-  <h2>Recent Team Form</h2>
+  <h2>Recent match results</h2>
   <div class="table-wrapper">
     <table class="data-table" id="last5Results" aria-label="Recent team match results">
       <thead>
@@ -175,17 +175,9 @@
 <!-- Team Stats Page -->
 <main id="team" class="page" role="tabpanel" aria-labelledby="team-tab">
   <h2>Team Statistics</h2>
-  <div class="stats-grid">
-    <div class="stat-card">
-      <h3>Win Percentage</h3>
-      <div class="value" id="winPct" aria-live="polite">-</div>
-    </div>
-  </div>
 
-  <h2>Win Rate Over Time</h2>
-  <div class="chart-container">
-    <canvas id="winRateChart" aria-label="Win rate trend over time"></canvas>
-  </div>
+  <h2>Team Recent Form &amp; Momentum</h2>
+  <div id="formMomentumSection" class="form-momentum-card" role="region" aria-label="Team recent form and momentum"></div>
 
   <h2>Win Rate by Ground</h2>
   <div class="table-wrapper">

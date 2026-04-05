@@ -36,7 +36,8 @@ Then open http://localhost:8000 in your browser.
 If data is not loading:
 1. Make sure you're accessing via `http://localhost:8000` (not `file://`)
 2. Check the browser console (F12) for error messages
-3. Verify that all JSON files exist in the `assets/` directory:
+3. After re-running `analyze.py`, do a **hard refresh** so the browser does not show an old cached `match_results.json`
+4. Verify that all JSON files exist in the `assets/` directory:
    - `player_stats.json`
    - `player_photos.json`
    - `match_results.json`

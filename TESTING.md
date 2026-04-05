@@ -43,7 +43,7 @@ python3 analyze.py
 - Should track batting positions
 - Should parse match results (Win/Loss/Draw)
 - Should generate new JSON files:
-  - `team_dashboard/assets/match_results.json` (last 5 matches)
+  - `team_dashboard/assets/match_results.json` (all matches, newest first; home table shows a filtered subset)
   - `team_dashboard/assets/team_analytics.json` (win rates)
   - `team_dashboard/assets/series_list.json` (unique series)
   - `team_dashboard/assets/player_stats.json` (with position stats, recent performances, PoM)
@@ -85,10 +85,10 @@ open team_dashboard/index.html
 
 ### Team Stats Page
 1. ✅ Click "Team Stats" button in navigation
-2. ✅ **Win Percentage** - Should show overall win %
-3. ✅ **Win Rate by Ground** - Table with wins/losses/draws per ground
-4. ✅ **Win Rate by Toss Outcome** - Table with wins/losses when batted/bowled first
-5. ✅ **Win Rate by Match Type** - Table with League vs Playoff stats
+2. ✅ **Team Recent Form & Momentum** - W/L/D strip (W(F)/L(F) for forfeits), rolling % and streak; updates when filters change
+3. ✅ **Win Rate by Ground** - Table with wins/losses/draws per ground; should **narrow** when date/series filters exclude matches (same filter scope as form strip)
+4. ✅ **Win Rate by Toss Outcome** - Table with wins/losses when batted/bowled first; respects filters
+5. ✅ **Win Rate by Match Type** - Table with League vs Playoff stats; respects filters
 
 ### Player Stats Page
 1. ✅ Click "Player Stats" button in navigation
@@ -98,8 +98,9 @@ open team_dashboard/index.html
    - Aggregated batting stats (Runs, SR, Avg, Dot%, 4s, 6s)
    - Aggregated bowling stats (Wickets, Overs, Econ, Dot%)
 4. ✅ **Batting by Position** - Table showing SR and Avg for each position played
-5. ✅ **Recent Performances** - Last 5 batting innings and bowling spells
-6. ✅ **Man of the Match Awards** - List of matches where player was PoM
+5. ✅ **Performance Trends** - Bar charts for last 5 innings (runs) and spells (wickets); opponent + date on x-axis; tooltips show balls/SR and runs/overs
+6. ✅ **Recent Performances** - Last 5 batting innings and bowling spells
+7. ✅ **Man of the Match Awards** - List of matches where player was PoM
 
 ### Filters (All Pages)
 1. ✅ **Date Range Picker** - Default should be last 30 days
@@ -129,7 +130,7 @@ python3 -c "
 import json
 with open('team_dashboard/assets/match_results.json') as f:
     results = json.load(f)
-print('Last 5 matches:')
+print('All matches (newest first):')
 for m in results:
     print(f\"  {m.get('match_date')} vs {m.get('opponent')} - {m.get('result')} ({m.get('ground')})\")
 "
@@ -139,7 +140,7 @@ python3 -c "
 import json
 with open('team_dashboard/assets/team_analytics.json') as f:
     ta = json.load(f)
-print('Overall Win %:', ta.get('overall_win_pct'))
+print('Overall Win % (in team_analytics.json; not shown on Team Stats UI):', ta.get('overall_win_pct'))
 print('Win rate by ground:', ta.get('win_rate_by_ground'))
 "
 ```
@@ -181,7 +182,7 @@ team_dashboard/assets/
 ├── _debug_bowling_rows.csv      (with new columns)
 ├── player_stats.json            (with position_stats, recent_batting, recent_bowling, pom_matches)
 ├── player_photos.json
-├── match_results.json           (last 5 matches)
+├── match_results.json           (all matches; dashboard applies filters / row limits in the UI)
 ├── team_analytics.json          (win rates)
 └── series_list.json             (unique series names)
 ```
