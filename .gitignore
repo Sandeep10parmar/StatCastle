@@ -22,6 +22,7 @@ team_dashboard/*.txt
 .DS_Store
 
 # IDE
+.cursor/
 .vscode/
 .idea/
 *.swp
