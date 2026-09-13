@@ -1,0 +1,189 @@
+[
+  {
+    "match_id": 1152,
+    "source": "pdf_manual",
+    "manual_meta": {
+      "series": "Season 12 - Professional Division (S12D3)",
+      "ground": "Tombass Cricket Field #1",
+      "toss_winner": "Royal Savannah",
+      "toss_decision": "bowled",
+      "player_of_match": null,
+      "match_date": "2026-06-13",
+      "match_type": null,
+      "is_playoff": false,
+      "opponent_team": "Royal Savannah",
+      "match_result": "Win",
+      "result_margin": "2 Wickets",
+      "result_detail": null
+    },
+    "manual_batting": [
+      {
+        "Name": "Sandeep Parmar",
+        "Runs": 63.0,
+        "Balls": 52.0,
+        "4s": 5.0,
+        "6s": 1.0,
+        "SR": 121.15,
+        "Dismissal Type": "catch",
+        "Batting_Position": 1
+      },
+      {
+        "Name": "Partha Mohanty",
+        "Runs": 0.0,
+        "Balls": 2.0,
+        "4s": 0.0,
+        "6s": 0.0,
+        "SR": 0.0,
+        "Dismissal Type": "catch",
+        "Batting_Position": 2
+      },
+      {
+        "Name": "Siddhant Singhee",
+        "Runs": 7.0,
+        "Balls": 8.0,
+        "4s": 0.0,
+        "6s": 0.0,
+        "SR": 87.5,
+        "Dismissal Type": "catch",
+        "Batting_Position": 3
+      },
+      {
+        "Name": "Ganapathy Bollianda",
+        "Runs": 3.0,
+        "Balls": 6.0,
+        "4s": 0.0,
+        "6s": 0.0,
+        "SR": 50.0,
+        "Dismissal Type": "catch",
+        "Batting_Position": 4
+      },
+      {
+        "Name": "Chinmay Morankar",
+        "Runs": 4.0,
+        "Balls": 9.0,
+        "4s": 0.0,
+        "6s": 0.0,
+        "SR": 44.44,
+        "Dismissal Type": "run out",
+        "Batting_Position": 5
+      },
+      {
+        "Name": "Rakshit Kalra",
+        "Runs": 3.0,
+        "Balls": 9.0,
+        "4s": 0.0,
+        "6s": 0.0,
+        "SR": 33.33,
+        "Dismissal Type": "catch",
+        "Batting_Position": 6
+      },
+      {
+        "Name": "Raj Mane",
+        "Runs": 18.0,
+        "Balls": 17.0,
+        "4s": 1.0,
+        "6s": 0.0,
+        "SR": 105.88,
+        "Dismissal Type": "bowled",
+        "Batting_Position": 7
+      },
+      {
+        "Name": "Pranav Hirve",
+        "Runs": 1.0,
+        "Balls": 2.0,
+        "4s": 0.0,
+        "6s": 0.0,
+        "SR": 50.0,
+        "Dismissal Type": "bowled",
+        "Batting_Position": 8
+      },
+      {
+        "Name": "Dhiraj Patil",
+        "Runs": 6.0,
+        "Balls": 9.0,
+        "4s": 0.0,
+        "6s": 0.0,
+        "SR": 66.67,
+        "Dismissal Type": "not out",
+        "Batting_Position": 9
+      },
+      {
+        "Name": "Amit Jain",
+        "Runs": 0.0,
+        "Balls": 1.0,
+        "4s": 0.0,
+        "6s": 0.0,
+        "SR": 0.0,
+        "Dismissal Type": "not out",
+        "Batting_Position": 10
+      },
+      {
+        "Name": "Hemant Kumthekar",
+        "Runs": 0.0,
+        "Balls": 0.0,
+        "4s": 0.0,
+        "6s": 0.0,
+        "SR": 0.0,
+        "Dismissal Type": "not out",
+        "Batting_Position": 11
+      }
+    ],
+    "manual_bowling": [
+      {
+        "bowler": "Dhiraj Patil",
+        "o": 4.0,
+        "m": 0.0,
+        "dot": null,
+        "r": 21.0,
+        "w": 2.0,
+        "econ": 5.25,
+        "Wd": 1.0,
+        "Nb": 0.0
+      },
+      {
+        "bowler": "Sandeep Parmar",
+        "o": 4.0,
+        "m": 0.0,
+        "dot": null,
+        "r": 31.0,
+        "w": 2.0,
+        "econ": 7.75,
+        "Wd": 3.0,
+        "Nb": 0.0
+      },
+      {
+        "bowler": "Hemant Kumthekar",
+        "o": 4.0,
+        "m": 0.0,
+        "dot": null,
+        "r": 34.0,
+        "w": 1.0,
+        "econ": 8.5,
+        "Wd": 1.0,
+        "Nb": 0.0
+      },
+      {
+        "bowler": "Amit Jain",
+        "o": 3.0,
+        "m": 0.0,
+        "dot": null,
+        "r": 20.0,
+        "w": 2.0,
+        "econ": 6.67,
+        "Wd": 1.0,
+        "Nb": 0.0
+      },
+      {
+        "bowler": "Pranav Hirve",
+        "o": 4.0,
+        "m": 0.0,
+        "dot": null,
+        "r": 14.0,
+        "w": 3.0,
+        "econ": 3.5,
+        "Wd": 4.0,
+        "Nb": 0.0
+      }
+    ]
+  }
+]

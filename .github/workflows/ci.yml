@@ -1,4 +1,10 @@
 name: build-and-deploy
+# Match data is no longer scraped in CI - CricClubs' Cloudflare protection
+# blocks the automated browser entirely (see cricclubs_export.py). Raw match
+# data under cricclubs_export_out/ is committed to the repo (added manually
+# via pdf_ingest.py from CricClubs' own per-match PDF export), and this
+# workflow just runs analyze.py against it and deploys the result. No
+# schedule trigger: nothing changes here without a push adding new match data.
 
 on:
   push:
@@ -6,8 +12,6 @@ on:
   pull_request:
     branches: [ main ]
   workflow_dispatch:  # Allows manual run from Actions tab
-  schedule:
-    - cron: "0 12 * * 1"  # Every Monday 12:00 UTC
 
 permissions:
   contents: read
@@ -36,70 +40,26 @@ jobs:
             echo "Using requirements.txt"
             pip install -r requirements.txt
           fi
-          # Ensure playwright is installed (may be missing from lock file)
-          pip install playwright>=1.40
           python -c "import yaml; print('PyYAML OK:', yaml.__version__)"
-          python -c "import playwright; print('Playwright OK: installed')"
-      - name: Install Playwright browser
-        run: |
-          python -m playwright install chromium
-          python -m playwright install-deps chromium
-          # Verify installation
-          python -c "from playwright.sync_api import sync_playwright; pw = sync_playwright().start(); print('Playwright browser OK'); pw.stop()"
       - name: Verify config.yaml exists
         run: |
           if [ -f config.yaml ]; then
             echo "✓ config.yaml found"
             echo "Team name: $(grep '^team_name:' config.yaml | cut -d'"' -f2)"
-            # Count leagues using Python for more reliable YAML parsing
-            league_count=$(python3 -c "import yaml; f=open('config.yaml'); c=yaml.safe_load(f); print(len(c.get('leagues', [])))" 2>/dev/null || echo "0")
-            echo "Number of leagues: $league_count"
-            if [ "$league_count" = "0" ]; then
-              echo "⚠️  WARNING: No leagues found in config.yaml"
-            fi
           else
             echo "✗ config.yaml not found!"
             exit 1
           fi
-      - name: Fetch match data
+      - name: Verify committed match data exists
         run: |
-          echo "Starting data export..."
-          echo "Environment:"
-          echo "  HEADLESS=${{ env.HEADLESS || '1' }}"
-          echo "  MAX_LEAGUE_WORKERS=${{ env.MAX_LEAGUE_WORKERS || '3' }}"
-          echo "  MAX_MATCH_WORKERS=${{ env.MAX_MATCH_WORKERS || '4' }}"
-          echo "  MATCH_DELAY=${{ env.MATCH_DELAY || '0.3' }}"
-          echo ""
-          echo "Running export (this may take several minutes)..."
-          timeout 1800 python cricclubs_export.py || {
-            echo "⚠️  Export timed out or failed, but continuing to check for partial data..."
-            exit_code=$?
-            echo "Exit code: $exit_code"
-          }
-          echo ""
-          echo "Export completed. Checking for data..."
           if ls cricclubs_export_out/*/matches.json 1> /dev/null 2>&1; then
             echo "✓ Match data found:"
             ls -lh cricclubs_export_out/*/matches.json
-            match_count=$(find cricclubs_export_out -name matches.json -exec cat {} + 2>/dev/null | python3 -c "import sys, json; data=[]; [data.extend(json.loads(line) if line.strip().startswith('[') else json.loads('['+line+']')) for line in sys.stdin if line.strip()]; print(sum(len(m) if isinstance(m, list) else 1 for m in data))" 2>/dev/null || (n=0; for f in cricclubs_export_out/*/matches.json; do n=$((n + $(grep -c "match_id" "$f" 2>/dev/null || 0))); done; echo $n))
-            echo "Total matches found: $match_count"
-            if [ "$match_count" = "0" ] || [ -z "$match_count" ]; then
-              echo "⚠️  WARNING: matches.json files exist but contain no match data"
-              echo "Checking file contents:"
-              find cricclubs_export_out -name matches.json -exec sh -c 'echo "  $1: $(wc -c < "$1") bytes"' _ {} \;
-            fi
           else
-            echo "✗ No match data found!"
-            echo "Checking if export directory was created:"
-            ls -la cricclubs_export_out/ 2>/dev/null || echo "  Export directory doesn't exist"
+            echo "✗ No match data found in cricclubs_export_out/!"
+            echo "Match data is committed to the repo (see AGENTS.md) - add it via pdf_ingest.py, not scraped in CI."
             exit 1
           fi
-        env:
-          HEADLESS: 1
-          MAX_LEAGUE_WORKERS: 2
-          MAX_MATCH_WORKERS: 2
-          MATCH_DELAY: 0.5
-          FORCE_REFRESH: 0
       - name: Build dashboard & PDF
         run: |
           echo "Starting analysis..."
