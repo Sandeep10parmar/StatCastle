@@ -41,3 +41,6 @@ __pycache__/
 
 # Playwright browser cache
 .pw-user/
+
+# Persisted CricClubs browser session (real auth cookies - see cricclubs_login.py)
+.cricclubs_session/

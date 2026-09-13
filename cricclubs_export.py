@@ -36,13 +36,18 @@ MATCH_DELAY = float(os.environ.get("MATCH_DELAY", "0.3"))  # Reduced from 0.8s
 FORCE_REFRESH = os.environ.get("FORCE_REFRESH", "0") != "0"
 print_lock = Lock()  # Thread-safe printing
 
+# Persistent browser profile (cookies incl. Cloudflare clearance) reused across
+# runs so we don't present a brand-new anonymous browser on every request.
+# Bootstrap it once with: python3 cricclubs_login.py
+PROFILE_DIR = Path(os.environ.get("CRICCLUBS_PROFILE_DIR", ".cricclubs_session"))
+
 def new_context(pw, base_path: str = None, league_id: int = None, club_id: int = None):
     ua = random.choice(DESKTOP_UAS)
-    browser = pw.chromium.launch(headless=HEADLESS, args=[
+    launch_args = [
         "--disable-blink-features=AutomationControlled",
         "--no-sandbox",
         "--disable-dev-shm-usage",
-    ])
+    ]
     headers = {
         "Accept-Language": "en-US,en;q=0.9",
         "Upgrade-Insecure-Requests": "1",
@@ -51,15 +56,34 @@ def new_context(pw, base_path: str = None, league_id: int = None, club_id: int =
     # set a referer that looks like site navigation if we have the info
     if base_path and league_id and club_id:
         headers["Referer"] = f"{base_path}/viewLeague.do?league={league_id}&clubId={club_id}"
-    context = browser.new_context(
-        user_agent=ua,
-        viewport={"width": 1366, "height": 2500},
-        locale="en-US",
-        timezone_id="America/Chicago",
-        java_script_enabled=True,
-        ignore_https_errors=True,
-        extra_http_headers=headers,
-    )
+
+    if PROFILE_DIR.exists() and any(PROFILE_DIR.iterdir()):
+        # Reuse the saved session (see cricclubs_login.py) instead of a fresh
+        # anonymous context, so an already-cleared Cloudflare check carries over.
+        context = pw.chromium.launch_persistent_context(
+            user_data_dir=str(PROFILE_DIR),
+            headless=HEADLESS,
+            args=launch_args,
+            user_agent=ua,
+            viewport={"width": 1366, "height": 2500},
+            locale="en-US",
+            timezone_id="America/Chicago",
+            java_script_enabled=True,
+            ignore_https_errors=True,
+            extra_http_headers=headers,
+        )
+        browser = None  # no separate Browser object for a persistent context
+    else:
+        browser = pw.chromium.launch(headless=HEADLESS, args=launch_args)
+        context = browser.new_context(
+            user_agent=ua,
+            viewport={"width": 1366, "height": 2500},
+            locale="en-US",
+            timezone_id="America/Chicago",
+            java_script_enabled=True,
+            ignore_https_errors=True,
+            extra_http_headers=headers,
+        )
     # Light stealth: remove webdriver flag
     context.add_init_script("""
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -155,7 +179,8 @@ def fetch_scorecard_rendered(url: str, context=None, base_path: str = None, leag
             if tables and re.search(r"<table", tables, flags=re.I):
                 if not use_external_context:
                     context.close()
-                    browser.close()
+                    if browser:
+                        browser.close()
                     pw.stop()
                 return tables, full_html
             else:
@@ -166,7 +191,8 @@ def fetch_scorecard_rendered(url: str, context=None, base_path: str = None, leag
                 page.close()
                 if not use_external_context:
                     context.close()
-                    browser.close()
+                    if browser:
+                        browser.close()
                     pw.stop()
             except Exception:
                 pass
@@ -222,7 +248,8 @@ def fetch_ball_by_ball(match_id: int, base_path: str, club_id: int, context=None
                 table_count = len(re.findall(r"<table", ball_html, flags=re.I))
                 if not use_external_context:
                     context.close()
-                    browser.close()
+                    if browser:
+                        browser.close()
                     pw.stop()
                 with print_lock:
                     print(f"  -> ball-by-ball: {len(ball_html)} chars, {table_count} tables")
@@ -235,7 +262,8 @@ def fetch_ball_by_ball(match_id: int, base_path: str, club_id: int, context=None
                 page.close()
                 if not use_external_context:
                     context.close()
-                    browser.close()
+                    if browser:
+                        browser.close()
                     pw.stop()
             except Exception:
                 pass
@@ -259,8 +287,17 @@ def discover_match_ids(base_path: str, club_id: int, league_id: int, team_id: in
                 page = context.new_page()
                 try:
                     page.goto(url, wait_until="domcontentloaded", timeout=30000)
-                    # Wait for content to load
-                    page.wait_for_timeout(2000)
+                    # Cloudflare's bot-check interstitial can take several
+                    # seconds to auto-clear before the real team-results page
+                    # renders; wait for an actual scorecard link (or fall back
+                    # to networkidle) instead of a fixed short delay.
+                    try:
+                        page.wait_for_selector("a[href*='viewScorecard.do']", timeout=15000)
+                    except PTimeout:
+                        try:
+                            page.wait_for_load_state("networkidle", timeout=15000)
+                        except PTimeout:
+                            pass
                     # Scroll to ensure all content loads
                     for y in (800, 1600, 2400):
                         page.mouse.wheel(0, y)
@@ -268,8 +305,8 @@ def discover_match_ids(base_path: str, club_id: int, league_id: int, team_id: in
                     html = page.content()
                     page.close()
                     context.close()
-                    browser.close()
-                    
+                    if browser:
+                        browser.close()
                     # Extract match IDs from links matching viewScorecard.do?matchId=XXXX
                     # Pattern: viewScorecard.do?clubId=XXXX&matchId=YYYY or viewScorecard.do?matchId=YYYY
                     match_ids = set()
@@ -297,7 +334,8 @@ def discover_match_ids(base_path: str, club_id: int, league_id: int, team_id: in
                     try:
                         page.close()
                         context.close()
-                        browser.close()
+                        if browser:
+                            browser.close()
                     except Exception:
                         pass
                     time.sleep(1.0 + attempt * 0.5)
@@ -347,7 +385,8 @@ def fetch_match_info(match_id: int, base_path: str, club_id: int, context=None, 
             page.close()
             if not use_external_context:
                 context.close()
-                browser.close()
+                if browser:
+                    browser.close()
                 pw.stop()
             return info_html
         except Exception as e:
@@ -356,7 +395,8 @@ def fetch_match_info(match_id: int, base_path: str, club_id: int, context=None, 
                 page.close()
                 if not use_external_context:
                     context.close()
-                    browser.close()
+                    if browser:
+                        browser.close()
                     pw.stop()
             except Exception:
                 pass

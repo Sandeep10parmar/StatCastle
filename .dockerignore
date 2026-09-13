@@ -36,6 +36,9 @@ team_dashboard/assets/_debug_*.csv
 # Personal config (users should create their own)
 config.yaml
 
+# Persisted CricClubs browser session (real auth cookies - see cricclubs_login.py)
+.cricclubs_session/
+
 # Documentation (not needed in image)
 *.md
 !README.md

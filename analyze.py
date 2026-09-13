@@ -1796,6 +1796,50 @@ def main():
                 continue
             seen_matches.add(match_key)
 
+            if match.get("source") == "pdf_manual":
+                match_meta = dict(match.get("manual_meta") or {})
+                bats_before, bowls_before = len(bats), len(bowls)
+                for br in match.get("manual_batting", []):
+                    br = dict(br)
+                    normalized = normalize_with_roster(br["Name"], roster_map, unknown_batters)
+                    if normalized is None:
+                        continue
+                    br["Name"] = normalized
+                    br["Match_Id"] = match_id
+                    br["series"] = match_meta.get("series")
+                    br["ground"] = match_meta.get("ground")
+                    br["toss_winner"] = match_meta.get("toss_winner")
+                    br["toss_decision"] = match_meta.get("toss_decision")
+                    br["player_of_match"] = match_meta.get("player_of_match")
+                    br["match_result"] = match_meta.get("match_result")
+                    br["opponent_team"] = match_meta.get("opponent_team")
+                    br["result_detail"] = match_meta.get("result_detail")
+                    br.setdefault("match_date", match_meta.get("match_date"))
+                    br.setdefault("match_type", match_meta.get("match_type"))
+                    br.setdefault("is_playoff", match_meta.get("is_playoff"))
+                    bats.append(br)
+                for wr in match.get("manual_bowling", []):
+                    wr = dict(wr)
+                    normalized = normalize_with_roster(wr["bowler"], roster_map, unknown_bowlers)
+                    if normalized is None:
+                        continue
+                    wr["bowler"] = normalized
+                    wr["match_id"] = match_id
+                    wr["series"] = match_meta.get("series")
+                    wr["ground"] = match_meta.get("ground")
+                    wr["toss_winner"] = match_meta.get("toss_winner")
+                    wr["toss_decision"] = match_meta.get("toss_decision")
+                    wr["player_of_match"] = match_meta.get("player_of_match")
+                    wr["match_result"] = match_meta.get("match_result")
+                    wr["opponent_team"] = match_meta.get("opponent_team")
+                    wr["result_detail"] = match_meta.get("result_detail")
+                    bowls.append(wr)
+                if len(bats) == bats_before and len(bowls) == bowls_before:
+                    extra = _match_result_row_from_meta(match_id, match_meta)
+                    if extra:
+                        supplemental_match_results.append(extra)
+                continue
+
             html_tables = match.get("tables_html") or match.get("html", "")
             full_html = match.get("full_html") or match.get("page_html") or html_tables
             info_html = match.get("info_html")
